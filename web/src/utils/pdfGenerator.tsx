@@ -292,7 +292,7 @@ function ReportDocument({ config }: { config: ReportConfig }): ReactElement {
         {contentElements}
         
         {/* 页脚 */}
-        <Text style={styles.footer}>{company} · Al-IDME 智能材料设计平台</Text>
+        <Text style={styles.footer}>{company} · 智能Al合金设计系统</Text>
       </Page>
     </Document>
   )

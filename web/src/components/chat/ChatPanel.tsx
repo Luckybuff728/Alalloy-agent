@@ -205,10 +205,10 @@ function WelcomeScreen() {
         <div className="welcome-icon">
           <Sparkles size={40} />
         </div>
-        <h1 className="welcome-title">Al-IDME 智能合金设计</h1>
-        <p className="welcome-desc">
+        <h1 className="welcome-title">智能Al合金设计</h1>
+        {/* <p className="welcome-desc">
           基于 AI 的铝合金智能设计系统
-        </p>
+        </p> */}
         <div className="feature-grid">
           <FeatureCard icon={<Database size={20} />} label="材料数据库" />
           <FeatureCard icon={<Cpu size={20} />} label="ML 预测" />

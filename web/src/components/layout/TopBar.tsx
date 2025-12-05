@@ -23,9 +23,9 @@ export function TopBar({ isConnected, workflowStatus, stepsProgress }: TopBarPro
     <div className="top-bar">
       {/* 左侧：系统名称 */}
       <div className="top-bar-left">
-        <Sparkles className="top-bar-logo" size={20} />
-        <span className="top-bar-title">Al-IDME</span>
-        <span className="top-bar-subtitle">智能合金设计系统</span>
+        {/* <Sparkles className="top-bar-logo" size={20} /> */}
+        <span className="top-bar-title">Alalloy Agent</span>
+        <span className="top-bar-subtitle">智能Al合金设计系统</span>
       </div>
 
       {/* 中间：工作流状态 */}

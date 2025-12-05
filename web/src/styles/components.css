@@ -1,0 +1,355 @@
+/**
+ * 通用组件样式
+ * 包含：按钮、输入框、卡片、标签、状态指示器等
+ */
+
+/* ================================
+   品牌与标题
+   ================================ */
+
+.brand-title {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.gradient-text {
+  color: var(--primary);
+}
+
+/* ================================
+   工具卡片
+   ================================ */
+
+.tool-card {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+  transition: all 0.2s ease;
+}
+
+.tool-card:hover {
+  border-color: var(--primary-light);
+  background: var(--bg-secondary);
+}
+
+.tool-card.database {
+  border-left: 3px solid var(--tool-database);
+}
+
+.tool-card.ml_model {
+  border-left: 3px solid var(--tool-ml);
+}
+
+.tool-card.simulation {
+  border-left: 3px solid var(--tool-simulation);
+}
+
+/* ================================
+   消息气泡
+   ================================ */
+
+.message-bubble {
+  max-width: 90%;
+  word-wrap: break-word;
+  padding: var(--spacing-sm) var(--spacing-md);
+}
+
+.message-bubble.user {
+  background: var(--primary);
+  color: white;
+  border-radius: var(--radius-md);
+  padding: var(--spacing-sm) var(--spacing-md);
+  max-width: 80%;
+}
+
+.message-bubble.assistant {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  max-width: 100%;
+}
+
+.message-row {
+  display: flex;
+  gap: var(--spacing-sm);
+  align-items: flex-start;
+}
+
+.message-row.user {
+  justify-content: flex-end;
+  padding-left: 20%;
+}
+
+.message-content {
+  white-space: pre-wrap;
+  font-size: var(--font-base);
+  line-height: 1.6;
+  color: inherit;
+}
+
+/* ================================
+   头像
+   ================================ */
+
+.avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.avatar.assistant {
+  background: transparent;
+}
+
+.avatar-icon {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+
+/* ================================
+   状态指示器
+   ================================ */
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+}
+
+.status-dot.pending {
+  background: var(--text-tertiary);
+}
+
+.status-dot.running {
+  background: var(--primary);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.status-dot.completed {
+  background: var(--success);
+}
+
+.status-dot.error {
+  background: var(--danger);
+}
+
+/* ================================
+   输入框
+   ================================ */
+
+.input-modern {
+  flex: 1;
+  background: transparent;
+  border: none;
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-size: var(--font-base);
+  color: var(--text-primary);
+  transition: all 0.2s ease;
+}
+
+.input-modern::placeholder {
+  color: var(--text-tertiary);
+}
+
+.input-modern:focus {
+  outline: none;
+}
+
+.input-modern:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.input-wrapper {
+  max-width: 100%;
+  display: flex;
+  gap: var(--spacing-sm);
+  align-items: center;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-lg);
+}
+
+/* ================================
+   按钮
+   ================================ */
+
+.btn-primary {
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: var(--radius-full);
+  padding: var(--spacing-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--primary-hover);
+  box-shadow: var(--shadow-md);
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 兼容旧类名 */
+.btn-gradient {
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: var(--radius-full);
+  padding: var(--spacing-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-gradient:hover:not(:disabled) {
+  background: var(--primary-hover);
+  box-shadow: var(--shadow-md);
+}
+
+.btn-gradient:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ================================
+   标签与徽章
+   ================================ */
+
+.alloy-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+}
+
+.alloy-tag {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: var(--primary-lighter);
+  border: 1px solid var(--primary-light);
+  border-radius: var(--radius-full);
+  font-size: var(--font-sm);
+  font-weight: 500;
+  color: var(--primary);
+}
+
+.alloy-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+}
+
+.alloy-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: var(--primary-lighter);
+  color: var(--primary);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-xs);
+  font-weight: 500;
+}
+
+.tool-badge {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-xs);
+  font-size: var(--font-xs);
+  font-weight: 500;
+}
+
+.tool-badge.success {
+  background: var(--success-light);
+  color: var(--success);
+}
+
+.tool-badge.error {
+  background: var(--danger-light);
+  color: var(--danger);
+}
+
+/* ================================
+   区块标题
+   ================================ */
+
+.section-title {
+  font-size: var(--font-xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ================================
+   空状态
+   ================================ */
+
+.empty-state {
+  color: var(--text-tertiary);
+  font-size: var(--font-base);
+  padding: var(--spacing-xl) 0;
+  text-align: center;
+}
+
+.empty-results {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  font-size: var(--font-base);
+}
+
+/* ================================
+   加载指示器
+   ================================ */
+
+.loading-indicator {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+}
+
+.loading-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  background: var(--primary-lighter);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary);
+}
+
+/* ================================
+   文字颜色辅助类
+   ================================ */
+
+.text-primary {
+  color: var(--primary) !important;
+}
+
+.text-secondary {
+  color: var(--text-secondary) !important;
+}
+
+.text-muted {
+  color: var(--text-tertiary) !important;
+}

@@ -1,0 +1,161 @@
+/**
+ * ReactFlow 工作流样式
+ * 包含：节点、连线、控制器等
+ */
+
+/* ================================
+   容器
+   ================================ */
+
+.workflow-graph-container {
+  background: var(--bg-primary);
+  overflow: hidden;
+}
+
+/* 空状态 */
+.wf-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  height: 100px;
+  color: var(--text-tertiary);
+  font-size: var(--font-sm);
+}
+
+/* ================================
+   节点样式
+   ================================ */
+
+/* 节点容器 */
+.wf-node {
+  cursor: default;
+}
+
+/* 节点内容 */
+.wf-node-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 16px;
+  border: 2px solid;
+  border-radius: var(--radius-lg);
+  background: white;
+  box-shadow: var(--shadow-md);
+  min-width: 90px;
+  transition: all 0.2s ease;
+}
+
+.wf-node-content:hover {
+  border-color: var(--primary-light);
+}
+
+/* 状态图标 */
+.wf-node-status {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-full);
+  background: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--border-light);
+}
+
+/* 节点图标 */
+.wf-node-icon {
+  margin-bottom: 6px;
+}
+
+/* 节点标签 */
+.wf-node-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* ================================
+   节点状态变体
+   ================================ */
+
+.wf-node-completed .wf-node-content {
+  border-color: #4caf50;
+  background: #e8f5e9;
+}
+
+.wf-node-running .wf-node-content {
+  border-color: #1976d2;
+  background: #e3f2fd;
+}
+
+.wf-node-error .wf-node-content {
+  border-color: #f44336;
+  background: #ffebee;
+}
+
+/* ================================
+   Handle 连接点
+   ================================ */
+
+.wf-handle {
+  width: 8px !important;
+  height: 8px !important;
+  background: #e0e0e0 !important;
+  border: 2px solid white !important;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+/* ================================
+   边样式
+   ================================ */
+
+.react-flow__edge-path {
+  stroke: #e0e0e0;
+  stroke-width: 2;
+}
+
+.react-flow__edge.animated .react-flow__edge-path {
+  stroke: #1976d2;
+  stroke-width: 2;
+}
+
+/* ================================
+   Controls 控制器
+   ================================ */
+
+.react-flow__controls {
+  box-shadow: var(--shadow-sm);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-light);
+  background: white;
+  overflow: hidden;
+}
+
+.react-flow__controls-button {
+  background: white;
+  border: none;
+  border-bottom: 1px solid var(--border-light);
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.react-flow__controls-button:hover {
+  background: var(--bg-secondary);
+}
+
+.react-flow__controls-button:last-child {
+  border-bottom: none;
+}
+
+.react-flow__controls-button svg {
+  fill: var(--text-secondary);
+}

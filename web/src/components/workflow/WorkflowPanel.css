@@ -1,0 +1,45 @@
+/**
+ * 工作流面板样式
+ */
+
+.workflow-panel {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  background: var(--bg-primary);
+  display: flex;
+  flex-direction: column;
+}
+
+.workflow-panel .panel-header {
+  display: flex;
+  align-items: center;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-bottom: 1px solid var(--border-light);
+  flex-shrink: 0;
+  background: var(--bg-primary);
+}
+
+.workflow-panel .panel-title {
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.workflow-panel .panel-hint {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.workflow-panel .panel-header {
+  justify-content: space-between;
+}
+
+.workflow-panel .panel-body-full {
+  flex: 1;
+  overflow: hidden;
+}

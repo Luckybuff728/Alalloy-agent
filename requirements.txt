@@ -1,0 +1,38 @@
+# langchain
+# langgraph
+# langchain-openai
+# langchain-core
+langchain-mcp-adapters
+# fastapi
+# uvicorn
+requests
+# python-dotenv
+# loguru
+
+# TopMat Agent 后端依赖 (v2.0 精简版)
+
+# LLM 框架
+langchain>=1.0.0
+langchain-openai>=0.2.0       # OpenAI兼容接口（通过百炼API）
+langgraph>=1.0.0              # 工作流编排
+dashscope>=1.20.0             # 阿里云百炼 SDK（嵌入、重排序）
+
+# 向量数据库
+pymilvus>=2.4.0               # Milvus Python SDK
+
+# Web 框架
+fastapi>=0.115.0
+uvicorn[standard]>=0.31.0     # 含websockets支持
+pydantic>=2.9.0
+
+# 数据库
+sqlalchemy>=2.0.0
+
+# 工具
+python-dotenv>=1.0.0
+httpx>=0.27.0
+# urllib3>=2.0.0                # HTTP客户端
+loguru>=0.7.0                 # 日志库
+passlib[bcrypt]>=1.7.4
+python-jose[cryptography]>=3.3.0
+

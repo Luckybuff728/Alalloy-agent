@@ -1,0 +1,221 @@
+/**
+ * 结果区域样式
+ * 包含：分析卡片、图表容器、性能卡片、视图切换等
+ */
+
+/* ================================
+   结果区块
+   ================================ */
+
+.result-section {
+  margin-bottom: var(--spacing-lg);
+}
+
+.result-title {
+  font-size: var(--font-xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ================================
+   分析卡片
+   ================================ */
+
+.analysis-card {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+  margin-bottom: var(--spacing-sm);
+  transition: all 0.2s ease;
+}
+
+.analysis-card:hover {
+  border-color: var(--primary-light);
+}
+
+.analysis-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+}
+
+.analysis-composition {
+  font-weight: 500;
+  font-size: var(--font-base);
+  color: var(--primary);
+}
+
+.analysis-type {
+  font-size: var(--font-xs);
+  color: var(--text-tertiary);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-xs);
+}
+
+.analysis-details {
+  margin-top: var(--spacing-sm);
+  padding-top: var(--spacing-sm);
+  border-top: 1px solid var(--border-light);
+}
+
+.interpretation {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  margin-bottom: var(--spacing-sm);
+  line-height: 1.6;
+}
+
+/* ================================
+   数据表格
+   ================================ */
+
+.result-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-xs);
+}
+
+.result-table th,
+.result-table td {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  text-align: left;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.result-table th {
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+}
+
+.result-table td {
+  color: var(--text-primary);
+}
+
+/* ================================
+   图表容器
+   ================================ */
+
+.chart-container {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+}
+
+.chart-title {
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-md);
+}
+
+/* ================================
+   性能卡片
+   ================================ */
+
+.performance-card {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-md);
+  margin-bottom: var(--spacing-sm);
+}
+
+.performance-card .card-title {
+  font-size: var(--font-base);
+  font-weight: 600;
+  color: var(--primary);
+  margin-bottom: var(--spacing-md);
+}
+
+.property-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.property-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.property-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.property-label {
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+}
+
+.property-value {
+  font-size: var(--font-xs);
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.property-bar {
+  height: 6px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.property-fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  transition: width 0.5s ease;
+}
+
+/* ================================
+   视图切换标签
+   ================================ */
+
+.view-tabs {
+  display: flex;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs);
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--spacing-md);
+}
+
+.view-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.view-tab:hover {
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+}
+
+.view-tab.active {
+  background: var(--bg-primary);
+  color: var(--primary);
+  border: 1px solid var(--border-light);
+  font-weight: 500;
+}

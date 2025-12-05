@@ -1,0 +1,121 @@
+/**
+ * 聊天面板样式
+ * 独立的样式文件，便于维护
+ */
+
+/* ================================
+   面板容器
+   ================================ */
+
+.chat-panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ================================
+   消息区域
+   ================================ */
+
+.messages-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--spacing-md) var(--spacing-lg);
+  background: var(--bg-primary);
+  position: relative;  /* 用于定位新内容按钮 */
+}
+
+/* ================================
+   输入区域
+   ================================ */
+
+.input-area {
+  padding: var(--spacing-sm) var(--spacing-lg) var(--spacing-md);
+  border-top: 1px solid var(--border-light);
+}
+
+.chat-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-size: var(--font-base);
+  color: var(--text-primary);
+}
+
+.chat-input:focus {
+  outline: none;
+}
+
+.chat-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+/* ================================
+   发送按钮
+   ================================ */
+
+.send-button {
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: var(--radius-full);
+  padding: var(--spacing-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.send-button:hover:not(:disabled) {
+  background: var(--primary-hover);
+}
+
+.send-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ================================
+   流式输出样式
+   ================================ */
+
+/* 打字光标 */
+.typing-cursor {
+  display: inline-block;
+  color: var(--text-tertiary);
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* ================================
+   新内容提示按钮
+   ================================ */
+
+.scroll-to-bottom {
+  position: sticky;
+  bottom: var(--spacing-md);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: 6px 12px;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: var(--radius-full);
+  font-size: var(--font-sm);
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  transition: all 0.2s ease;
+  z-index: 10;
+}
+
+.scroll-to-bottom:hover {
+  background: var(--primary-hover);
+  transform: translateX(-50%) scale(1.05);
+}

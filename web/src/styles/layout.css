@@ -1,0 +1,100 @@
+/**
+ * 布局样式
+ * 应用整体布局结构
+ */
+
+.app-root {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--bg-app);
+}
+
+.layout-wrapper {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.top-bar-wrapper {
+  flex-shrink: 0;
+}
+
+.resizable-layout {
+  flex: 1;
+  padding: 0 var(--spacing-md) var(--spacing-md);
+  gap: 0;
+}
+
+/* 面板容器 */
+.panel-left,
+.panel-main,
+.panel-right {
+  height: 100%;
+}
+
+.panel-content {
+  height: 100%;
+  background: var(--bg-primary);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-light);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 拖动手柄 */
+.resize-handle {
+  width: var(--spacing-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: col-resize;
+  transition: all 0.2s ease;
+}
+
+.resize-handle:hover .resize-handle-bar,
+.resize-handle[data-resize-handle-active] .resize-handle-bar {
+  background: var(--primary);
+  opacity: 1;
+}
+
+.resize-handle-bar {
+  width: 4px;
+  height: 40px;
+  background: var(--border-color);
+  border-radius: var(--radius-full);
+  opacity: 0.5;
+  transition: all 0.2s ease;
+}
+
+/* 面板标题 */
+.panel-header {
+  display: flex;
+  align-items: center;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-bottom: 1px solid var(--border-light);
+  flex-shrink: 0;
+  background: var(--bg-primary);
+}
+
+.panel-title {
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.panel-body-full {
+  flex: 1;
+  overflow: hidden;
+}
+
+/* 工作流面板 */
+.workflow-panel {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  background: var(--bg-primary);
+  display: flex;
+  flex-direction: column;
+}

@@ -1,0 +1,75 @@
+/**
+ * 工具类样式
+ * 包含：Tailwind 兼容类、动画、响应式等
+ */
+
+/* ================================
+   动画
+   ================================ */
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+/* ================================
+   Tailwind 兼容辅助类
+   ================================ */
+
+.flex { display: flex; }
+.items-center { align-items: center; }
+.justify-center { justify-content: center; }
+.gap-2 { gap: var(--spacing-sm); }
+.mb-6 { margin-bottom: var(--spacing-lg); }
+.space-y-2 > * + * { margin-top: var(--spacing-sm); }
+.space-y-3 > * + * { margin-top: var(--spacing-md); }
+.overflow-y-auto { overflow-y: auto; }
+.flex-1 { flex: 1; }
+.text-sm { font-size: var(--font-sm); }
+.text-xl { font-size: var(--font-xl); }
+.font-semibold { font-weight: 600; }
+.opacity-50 { opacity: 0.5; }
+.mb-3 { margin-bottom: var(--spacing-md); }
+
+/* ================================
+   响应式断点
+   ================================ */
+
+@media (max-width: 1399px) {
+  .sidebar-left {
+    width: 300px;
+  }
+  .sidebar-right {
+    width: 400px;
+  }
+}
+
+@media (max-width: 1199px) {
+  .sidebar-left {
+    width: 280px;
+  }
+  .sidebar-right {
+    width: 350px;
+  }
+}
+
+@media (max-width: 991px) {
+  .sidebar-right {
+    display: none;
+  }
+}
+
+@media (max-width: 767px) {
+  .sidebar-left {
+    display: none;
+  }
+}

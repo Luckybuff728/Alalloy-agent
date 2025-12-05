@@ -1,0 +1,99 @@
+/**
+ * 顶部状态栏样式
+ */
+
+.top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-sm) var(--spacing-lg);
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border-light);
+  height: 48px;
+}
+
+.top-bar-left {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.top-bar-logo {
+  color: var(--primary);
+}
+
+.top-bar-title {
+  font-size: var(--font-lg);
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.top-bar-subtitle {
+  font-size: var(--font-sm);
+  color: var(--text-tertiary);
+  margin-left: var(--spacing-sm);
+  padding-left: var(--spacing-sm);
+  border-left: 1px solid var(--border-light);
+}
+
+.top-bar-center {
+  display: flex;
+  align-items: center;
+}
+
+.workflow-status {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: var(--font-sm);
+  padding: var(--spacing-xs) var(--spacing-md);
+  border-radius: var(--radius-full);
+}
+
+.workflow-status.running {
+  background: var(--primary-lighter);
+  color: var(--primary);
+}
+
+.workflow-status.completed {
+  background: var(--success-light);
+  color: var(--success);
+}
+
+.workflow-status.error {
+  background: var(--danger-light);
+  color: var(--danger);
+}
+
+.top-bar-right {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.connection-indicator {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: var(--font-xs);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-full);
+}
+
+.connection-indicator.connected {
+  background: var(--success-light);
+  color: var(--success);
+}
+
+.connection-indicator.disconnected {
+  background: var(--danger-light);
+  color: var(--danger);
+}
+
+.time-display {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: var(--font-xs);
+  color: var(--text-tertiary);
+}

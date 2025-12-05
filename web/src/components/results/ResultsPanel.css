@@ -1,0 +1,878 @@
+/**
+ * 结果面板样式
+ * 独立的样式文件，便于维护
+ */
+
+/* ================================
+   面板容器
+   ================================ */
+
+.results-panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ================================
+   标签页
+   ================================ */
+
+.panel-tabs {
+  display: flex;
+  gap: 0;
+  background: transparent;
+  border-bottom: 1px solid var(--border-light);
+  margin: 0 var(--spacing-md);
+}
+
+.panel-tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: none;
+  background: transparent;
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.panel-tab:hover {
+  color: var(--text-primary);
+}
+
+.panel-tab.active {
+  color: var(--primary);
+  border-bottom: 2px solid var(--primary);
+}
+
+.tab-badge {
+  background: var(--primary);
+  color: white;
+  font-size: var(--font-xs);
+  padding: 2px 6px;
+  border-radius: var(--radius-full);
+  min-width: 18px;
+  text-align: center;
+}
+
+/* ================================
+   面板内容
+   ================================ */
+
+.panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--spacing-md);
+}
+
+/* Tab 内容容器 - 使用 CSS 隐藏保持组件挂载 */
+.tab-content {
+  height: 100%;
+}
+
+.tab-content.hidden {
+  display: none;
+}
+
+.tools-view,
+.charts-view {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+/* ================================
+   结果项样式
+   ================================ */
+
+.result-count {
+  font-weight: normal;
+  color: var(--text-tertiary);
+  margin-left: var(--spacing-xs);
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: var(--font-xs);
+  padding: 2px 6px;
+  border-radius: var(--radius-xs);
+}
+
+.status-badge.success {
+  background: var(--success-light);
+  color: var(--success);
+}
+
+.status-badge.error {
+  background: var(--danger-light);
+  color: var(--danger);
+}
+
+.node-name {
+  font-size: var(--font-xs);
+  color: var(--text-tertiary);
+  margin-left: var(--spacing-sm);
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--spacing-sm);
+}
+
+.no-data {
+  color: var(--text-tertiary);
+  font-size: var(--font-sm);
+  font-style: italic;
+}
+
+.alloy-chip.more {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.empty-icon {
+  color: var(--text-tertiary);
+  opacity: 0.5;
+  margin-bottom: var(--spacing-md);
+}
+
+/* ================================
+   热力学数据卡片
+   ================================ */
+
+.thermo-data-card {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  margin-bottom: var(--spacing-sm);
+}
+
+.thermo-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.thermo-header:hover {
+  background: var(--bg-secondary);
+}
+
+.thermo-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background: #f97316;
+  color: white;
+}
+
+.thermo-composition {
+  flex: 1;
+  font-size: var(--font-sm);
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.thermo-content {
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-top: 1px solid var(--border-light);
+  background: var(--bg-primary);
+}
+
+/* ================================
+   结果渲染样式
+   ================================ */
+
+.error-message {
+  color: var(--danger);
+  font-size: var(--font-sm);
+  padding: var(--spacing-sm);
+  background: var(--danger-light);
+  border-radius: var(--radius-sm);
+}
+
+.result-summary {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.result-summary strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.idme-result,
+.thermo-result {
+  display: flex;
+  flex-direction: column;
+}
+
+/* 简洁卡片样式 */
+.tool-result-card {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-sm) var(--spacing-md);
+  margin-bottom: var(--spacing-sm);
+}
+
+.tool-result-card.error {
+  border-color: var(--danger-light);
+  background: rgba(217, 48, 37, 0.02);
+}
+
+.tool-result-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.tool-result-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.tool-result-icon.database {
+  background: var(--primary-lighter);
+  color: var(--primary);
+}
+
+.tool-result-icon.ml_model {
+  background: #f3e8ff;
+  color: #8b5cf6;
+}
+
+.tool-result-icon.simulation {
+  background: #fef3c7;
+  color: #f59e0b;
+}
+
+.tool-result-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.tool-result-name {
+  font-size: var(--font-sm);
+  font-weight: 500;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+}
+
+.composition-tag {
+  font-size: var(--font-xs);
+  font-weight: 400;
+  color: var(--text-tertiary);
+  background: var(--bg-tertiary);
+  padding: 2px 6px;
+  border-radius: var(--radius-xs);
+}
+
+.status-indicator {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.status-indicator.success {
+  background: var(--success-light);
+  color: var(--success);
+}
+
+.status-indicator.error {
+  background: var(--danger-light);
+  color: var(--danger);
+}
+
+.tool-result-content {
+  margin-top: var(--spacing-sm);
+  padding-top: var(--spacing-sm);
+  border-top: 1px solid var(--border-light);
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--spacing-sm);
+}
+
+.metric-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-xs) 0;
+}
+
+.metric-label {
+  font-size: var(--font-xs);
+  color: var(--text-tertiary);
+}
+
+.metric-value {
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.metric-unit {
+  font-size: var(--font-xs);
+  font-weight: 400;
+  color: var(--text-tertiary);
+  margin-left: 2px;
+}
+
+.no-data {
+  font-size: var(--font-sm);
+  color: var(--text-tertiary);
+  text-align: center;
+  padding: var(--spacing-sm);
+}
+
+/* ================================
+   热力学计算结果样式
+   ================================ */
+
+.thermo-result {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.thermo-temp,
+.thermo-range,
+.thermo-points,
+.thermo-gibbs,
+.thermo-fraction {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.thermo-temp strong,
+.thermo-range strong,
+.thermo-points strong,
+.thermo-gibbs strong,
+.thermo-fraction strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.thermo-gibbs strong {
+  color: #059669;  /* 绿色，表示能量 */
+}
+
+.thermo-fraction strong {
+  color: #8b5cf6;  /* 紫色，表示分数 */
+}
+
+.thermo-temps {
+  display: flex;
+  gap: var(--spacing-md);
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  flex-wrap: wrap;
+}
+
+.thermo-temps span {
+  display: flex;
+  gap: var(--spacing-xs);
+}
+
+.thermo-temps strong {
+  color: #f59e0b;
+  font-weight: 600;
+}
+
+.thermo-phases {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  margin-top: var(--spacing-xs);
+}
+
+.phase-label {
+  font-size: var(--font-xs);
+  color: var(--text-tertiary);
+}
+
+.phase-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.phase-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--font-xs);
+  padding: 2px 8px;
+  background: #fef3c7;
+  color: #92400e;
+  border-radius: var(--radius-sm);
+  border: 1px solid #fcd34d;
+}
+
+.phase-fraction {
+  font-weight: 600;
+  color: #d97706;
+}
+
+.phase-more {
+  font-size: var(--font-xs);
+  color: var(--text-tertiary);
+  padding: 2px 6px;
+}
+
+/* 线计算 - 相分数范围 */
+.thermo-fractions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  margin-top: var(--spacing-xs);
+}
+
+.fraction-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.fraction-item {
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+  padding: 2px 0;
+}
+
+/* 线计算 - 化学势摘要 */
+.thermo-chem-pot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  margin-top: var(--spacing-xs);
+}
+
+.chem-pot-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chem-pot-item {
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+  padding: 2px 0;
+  font-family: 'Monaco', 'Consolas', monospace;
+}
+
+/* 线计算 - 液相线温度 */
+.thermo-liquidus {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  margin-top: var(--spacing-xs);
+}
+
+.thermo-liquidus strong {
+  color: #dc2626;  /* 红色表示重要温度 */
+  font-weight: 600;
+}
+
+.temp-note {
+  font-size: var(--font-xs);
+  color: var(--text-tertiary);
+  margin-left: 4px;
+}
+
+.temp-count {
+  font-size: var(--font-xs);
+  color: var(--text-tertiary);
+  margin-left: 6px;
+}
+
+/* 线计算 - 相演化流程 */
+.thermo-evolution {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  margin-top: var(--spacing-xs);
+}
+
+.evolution-flow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.evolution-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.evolution-arrow {
+  color: var(--text-tertiary);
+  font-size: var(--font-xs);
+}
+
+/* 线计算 - 吉布斯能摘要 */
+.thermo-gibbs-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  margin-top: var(--spacing-xs);
+}
+
+.gibbs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.gibbs-item {
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+  font-family: 'Monaco', 'Consolas', monospace;
+}
+
+.gibbs-item.stable {
+  color: #059669;
+  font-weight: 600;
+}
+
+.stable-tag {
+  font-size: 10px;
+  background: #d1fae5;
+  color: #059669;
+  padding: 1px 4px;
+  border-radius: 2px;
+  margin-left: 4px;
+}
+
+/* 点计算 - 平衡相 */
+.thermo-equilibrium {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.thermo-equilibrium strong {
+  color: #7c3aed;  /* 紫色 */
+  font-weight: 600;
+}
+
+.thermo-gibbs-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  margin-top: var(--spacing-xs);
+}
+
+/* Scheil - 凝固温度 */
+.thermo-solidification {
+  margin-bottom: var(--spacing-xs);
+}
+
+.solidification-temps {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.temp-item {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.temp-item strong {
+  color: #dc2626;
+}
+
+.temp-arrow {
+  color: var(--text-tertiary);
+  font-size: var(--font-xs);
+}
+
+/* Scheil - 统计信息 */
+.solidification-stats {
+  display: flex;
+  gap: 16px;
+  margin: var(--spacing-xs) 0;
+}
+
+.stat-item {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.stat-item strong {
+  color: var(--text-primary);
+}
+
+/* Scheil - 相分数 */
+.thermo-phase-fractions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  margin-top: var(--spacing-xs);
+}
+
+.fraction-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fraction-item {
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+  background: #f3f4f6;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+}
+
+.fraction-item strong {
+  color: #8b5cf6;
+}
+
+/* 小尺寸相标签 */
+.phase-chip.small {
+  font-size: 10px;
+  padding: 1px 6px;
+}
+
+/* ================================
+   合金选择器
+   ================================ */
+
+.alloy-selector {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--spacing-md);
+}
+
+.selector-label {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.selector-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+}
+
+.selector-chip {
+  padding: 4px 12px;
+  font-size: var(--font-sm);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-full);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.selector-chip:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.selector-chip.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: white;
+}
+
+/* ================================
+   报告标签小圆点
+   ================================ */
+
+.tab-badge-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--success);
+  border-radius: 50%;
+  margin-left: 6px;
+}
+
+/* ================================
+   报告视图样式
+   ================================ */
+
+.report-view {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  padding: var(--spacing-sm);
+}
+
+.report-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-xl) var(--spacing-md);
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.report-empty-icon {
+  color: var(--border);
+  margin-bottom: var(--spacing-md);
+}
+
+.report-empty p {
+  font-size: var(--font-md);
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-xs);
+}
+
+.report-empty-hint {
+  font-size: var(--font-xs);
+  color: var(--text-tertiary);
+}
+
+.report-card {
+  background: white;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.report-header {
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  padding: var(--spacing-md);
+  color: white;
+}
+
+.report-title {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-size: var(--font-lg);
+  font-weight: 600;
+  margin-bottom: var(--spacing-xs);
+}
+
+.report-meta {
+  display: flex;
+  gap: var(--spacing-md);
+  font-size: var(--font-xs);
+  opacity: 0.9;
+}
+
+.report-company {
+  font-weight: 500;
+}
+
+.report-alloys {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: #f0f9ff;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.report-alloys-label {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.report-alloy-tag {
+  background: #dbeafe;
+  color: #1e40af;
+  font-size: var(--font-xs);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-weight: 500;
+}
+
+.report-summary {
+  padding: var(--spacing-md);
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  line-height: 1.6;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.report-summary p {
+  margin: 0;
+}
+
+.report-actions {
+  padding: var(--spacing-md);
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+.report-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--radius-md);
+  font-size: var(--font-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+}
+
+.report-btn-primary {
+  background: var(--primary);
+  color: white;
+}
+
+.report-btn-primary:hover:not(:disabled) {
+  background: var(--primary-dark);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.report-btn-primary:disabled {
+  background: #94a3b8;
+  cursor: not-allowed;
+}
+
+.report-note {
+  text-align: center;
+  font-size: var(--font-xs);
+  color: var(--text-tertiary);
+}
+
+.report-note p {
+  margin: 0;
+}

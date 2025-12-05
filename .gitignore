@@ -1,0 +1,50 @@
+# 环境变量（敏感信息）
+.env
+
+# Python 缓存
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# 虚拟环境
+venv/
+.venv/
+# env/
+
+# 日志文件
+logs/
+*.log
+
+# IDE/编辑器
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Node.js 依赖
+node_modules/
+web/node_modules/
+
+# 前端构建产物
+web/dist/
+web/build/
+
+# 参考资料（不需要推送）
+langchain_reference/
+langchain_src/
+langgraph-main/
+
+# 系统文件
+.DS_Store
+Thumbs.db
+doc/
+UI_DESIGN_GUIDE.md
+activate-agent.ps1
+Al合金(Ver.2.3.0)-IDME.yml
+Linkx.py

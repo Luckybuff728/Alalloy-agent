@@ -1,0 +1,480 @@
+/**
+ * 工作流图样式
+ * 独立的样式文件，便于维护
+ */
+
+/* ================================
+   容器样式
+   ================================ */
+
+.workflow-graph-container {
+  width: 100%;
+  height: 100%;
+  background: var(--bg-primary);
+  border: none;
+  border-radius: 0;
+}
+
+/* ================================
+   ReactFlow 控件
+   ================================ */
+
+.workflow-graph-container .react-flow__background {
+  background: transparent !important;
+}
+
+.workflow-graph-container .react-flow__controls {
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+}
+
+.workflow-graph-container .react-flow__controls-button {
+  background: white;
+  border: none;
+  border-bottom: 1px solid #e2e8f0;
+  color: #64748b;
+  width: 28px;
+  height: 28px;
+}
+
+.workflow-graph-container .react-flow__controls-button:hover {
+  background: #f1f5f9;
+  color: #3b82f6;
+}
+
+.workflow-graph-container .react-flow__controls-button:last-child {
+  border-bottom: none;
+}
+
+/* ================================
+   节点基础样式
+   ================================ */
+
+.wf-node {
+  cursor: default;
+}
+
+.wf-node-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1.5px solid #e2e8f0;
+  background: #ffffff;
+  width: 84px;
+  height: 52px;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.wf-node:hover .wf-node-content {
+  border-color: #93c5fd;
+}
+
+/* ================================
+   节点状态徽章
+   ================================ */
+
+.wf-node-status {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid #e2e8f0;
+}
+
+/* ================================
+   节点图标和标签
+   ================================ */
+
+.wf-node-icon {
+  margin-bottom: 3px;
+  opacity: 0.9;
+}
+
+.wf-node-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+  line-height: 1.2;
+  white-space: nowrap;
+  max-width: 76px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ================================
+   节点状态：待处理
+   ================================ */
+
+.wf-node-pending .wf-node-content {
+  border-color: #e2e8f0;
+  background: #ffffff;
+}
+
+.wf-node-pending .wf-node-icon,
+.wf-node-pending .wf-node-label {
+  color: #94a3b8;
+}
+
+.wf-node-pending .wf-node-status {
+  background: #f1f5f9;
+  color: #cbd5e1;
+}
+
+/* ================================
+   节点状态：排队中（黄色闪烁）
+   ================================ */
+
+.wf-node-queued .wf-node-content {
+  border-color: #fbbf24;
+  background: #fefce8;
+}
+
+.wf-node-queued .wf-node-icon,
+.wf-node-queued .wf-node-label {
+  color: #d97706;
+}
+
+.wf-node-queued .wf-node-status {
+  background: #f59e0b;
+  color: white;
+}
+
+@keyframes wf-node-queued-blink {
+  0%, 100% { 
+    opacity: 1;
+    border-color: #fbbf24;
+  }
+  50% { 
+    opacity: 0.7;
+    border-color: #fcd34d;
+  }
+}
+
+/* ================================
+   节点状态：运行中
+   ================================ */
+
+.wf-node-running .wf-node-content {
+  border-color: #60a5fa;
+  background: #eff6ff;
+}
+
+.wf-node-running .wf-node-icon,
+.wf-node-running .wf-node-label {
+  color: #2563eb;
+}
+
+.wf-node-running .wf-node-status {
+  background: #3b82f6;
+  color: white;
+}
+
+@keyframes wf-node-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* ================================
+   节点状态：完成
+   ================================ */
+
+.wf-node-completed .wf-node-content {
+  border-color: #86efac;
+  background: #f0fdf4;
+}
+
+.wf-node-completed .wf-node-icon,
+.wf-node-completed .wf-node-label {
+  color: #16a34a;
+}
+
+.wf-node-completed .wf-node-status {
+  background: #22c55e;
+  color: white;
+}
+
+/* ================================
+   节点状态：错误
+   ================================ */
+
+.wf-node-error .wf-node-content {
+  border-color: #fca5a5;
+  background: #fef2f2;
+}
+
+.wf-node-error .wf-node-icon,
+.wf-node-error .wf-node-label {
+  color: #dc2626;
+}
+
+.wf-node-error .wf-node-status {
+  background: #ef4444;
+  color: white;
+}
+
+/* ================================
+   连接点样式（全部隐藏）
+   ================================ */
+
+.wf-handle {
+  width: 6px !important;
+  height: 6px !important;
+  background: transparent !important;
+  border: none !important;
+  opacity: 0;
+}
+
+/* 隐藏所有 ReactFlow 默认节点的连接点 */
+.react-flow__node-default .react-flow__handle {
+  opacity: 0 !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.wf-handle-top,
+.wf-handle-bottom {
+  left: 50% !important;
+  transform: translateX(-50%);
+}
+
+.wf-handle-left,
+.wf-handle-right {
+  top: 50% !important;
+  transform: translateY(-50%);
+}
+
+/* ================================
+   边样式
+   ================================ */
+
+.react-flow__edge-path {
+  stroke-linecap: round;
+}
+
+.react-flow__edge.animated .react-flow__edge-path {
+  stroke-dasharray: 4 2;
+  animation: wf-edge-dash 0.8s linear infinite;
+}
+
+@keyframes wf-edge-dash {
+  to { stroke-dashoffset: -6; }
+}
+
+/* ================================
+   可点击节点样式
+   ================================ */
+
+.wf-node-clickable {
+  cursor: pointer;
+}
+
+.wf-node-clickable .wf-node-content:hover {
+  transform: scale(1.03);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.wf-node-hint {
+  position: absolute;
+  bottom: -4px;
+  right: -4px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #3b82f6;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.wf-node-clickable:hover .wf-node-hint {
+  opacity: 1;
+}
+
+/* ================================
+   节点详情弹窗
+   ================================ */
+
+.wf-detail-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(2px);
+}
+
+.wf-detail-panel {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  width: 90%;
+  max-width: 500px;
+  max-height: 80vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.wf-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.wf-detail-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.wf-detail-status {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wf-detail-status-completed {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.wf-detail-status-error {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.wf-detail-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #64748b;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wf-detail-close:hover {
+  background: #e2e8f0;
+  color: #1e293b;
+}
+
+.wf-detail-composition {
+  padding: 12px 20px;
+  background: #eff6ff;
+  font-size: 13px;
+  color: #1e40af;
+}
+
+.wf-detail-composition strong {
+  font-weight: 600;
+}
+
+.wf-detail-section {
+  padding: 16px 20px;
+  flex: 1;
+  overflow: auto;
+}
+
+.wf-detail-section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+  margin-bottom: 12px;
+  text-transform: uppercase;
+}
+
+.wf-detail-content {
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+}
+
+.wf-detail-json {
+  margin: 0;
+  padding: 12px 16px;
+  font-size: 12px;
+  font-family: 'Monaco', 'Consolas', monospace;
+  color: #334155;
+  max-height: 400px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.wf-detail-empty {
+  padding: 24px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+/* ================================
+   错误状态
+   ================================ */
+
+.workflow-error {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fef2f2;
+}
+
+.workflow-error-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: #dc2626;
+  font-size: 14px;
+}
+
+.workflow-error-content button {
+  padding: 6px 16px;
+  background: #dc2626;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.workflow-error-content button:hover {
+  background: #b91c1c;
+}

@@ -1,0 +1,106 @@
+/**
+ * 步骤卡片样式
+ * 用于工作流步骤展示
+ */
+
+.step-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  cursor: pointer;
+}
+
+.step-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.step-icon.running {
+  background: var(--primary-lighter);
+  color: var(--primary);
+}
+
+.step-icon.completed {
+  background: var(--success-light);
+  color: var(--success);
+}
+
+.step-icon.error {
+  background: var(--danger-light);
+  color: var(--danger);
+}
+
+.step-icon.pending {
+  background: var(--bg-tertiary);
+  color: var(--text-tertiary);
+}
+
+.step-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.step-label {
+  font-size: var(--font-base);
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.step-desc {
+  font-size: var(--font-xs);
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.step-expand {
+  color: var(--text-tertiary);
+}
+
+.step-details {
+  margin-top: var(--spacing-sm);
+  padding-top: var(--spacing-sm);
+  border-top: 1px solid var(--border-light);
+}
+
+.tool-result {
+  margin-bottom: var(--spacing-sm);
+}
+
+.detail-label {
+  font-size: var(--font-xs);
+  color: var(--text-tertiary);
+  margin-bottom: var(--spacing-xs);
+}
+
+.tool-status {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.tool-status-text {
+  font-size: var(--font-xs);
+  color: var(--text-tertiary);
+}
+
+.data-preview {
+  font-size: 11px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  background: var(--bg-primary);
+  padding: var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  overflow-x: auto;
+  max-height: 150px;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-light);
+  line-height: 1.4;
+}

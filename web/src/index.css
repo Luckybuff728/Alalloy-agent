@@ -1,0 +1,9 @@
+/**
+ * 全局样式入口
+ * 导入 Tailwind 和模块化样式
+ */
+
+@import "tailwindcss";
+
+/* 导入所有模块化样式 */
+@import "./styles/index.css";

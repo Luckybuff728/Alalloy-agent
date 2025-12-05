@@ -1,0 +1,58 @@
+# ================================
+# Alalloy Agent Docker Compose
+# 前后端分离部署配置
+# ================================
+
+version: '3.8'
+
+services:
+  # ---- 后端服务 ----
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: alalloy-backend
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    environment:
+      - BACKEND_HOST=0.0.0.0
+      - BACKEND_PORT=8001
+      - FRONTEND_URL=http://localhost
+    env_file:
+      - .env
+    volumes:
+      # 日志持久化
+      - ./logs:/app/logs
+      # 报告持久化
+      - ./backend/reports:/app/backend/reports
+    networks:
+      - alalloy-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/docs')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ---- 前端服务 ----
+  frontend:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: alalloy-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - alalloy-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  alalloy-network:
+    driver: bridge

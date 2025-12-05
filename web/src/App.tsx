@@ -76,8 +76,23 @@ function App() {
     }
     isConnecting.current = true
 
-    // 从环境变量获取 WebSocket 地址，默认为 8001 端口
-    const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8001/ws/run'
+    // 动态构建 WebSocket 地址（支持 Docker 部署）
+    // 开发环境：直接连接后端 8001 端口
+    // 生产环境：通过 nginx 代理，使用当前页面的 host
+    const getWsUrl = () => {
+      const envUrl = import.meta.env.VITE_WS_URL
+      if (envUrl) {
+        // 如果是相对路径，根据当前页面构建完整 URL
+        if (envUrl.startsWith('/')) {
+          const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+          return `${protocol}//${window.location.host}${envUrl}`
+        }
+        return envUrl
+      }
+      // 默认开发环境地址
+      return 'ws://localhost:8001/ws/run'
+    }
+    const wsUrl = getWsUrl()
     const ws = new WebSocket(wsUrl)
     wsRef.current = ws
 

@@ -1,0 +1,54 @@
+# ================================
+# Docker 构建忽略文件
+# ================================
+
+# Git
+.git
+.gitignore
+
+# 环境变量（敏感信息）
+.env
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info
+.eggs
+venv/
+.venv/
+env/
+
+# Node.js
+node_modules/
+web/node_modules/
+
+# 构建产物
+web/dist/
+web/build/
+
+# 日志
+logs/
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# 参考资料（不需要打包）
+langchain_reference/
+langchain_src/
+langgraph-main/
+doc/
+
+# 测试文件
+*.test.py
+*_test.py
+
+# 临时文件
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db

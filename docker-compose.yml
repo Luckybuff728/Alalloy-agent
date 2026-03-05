@@ -1,57 +1,56 @@
-# ================================
-# Alalloy Agent Docker Compose
-# 前后端分离部署配置
-# ================================
-
-version: '3.8'
-
 services:
-  # ---- 后端服务 ----
+  # 后端服务
   backend:
+    image: 192.168.6.104:5000/alalloy-agent-backend:latest
     build:
       context: .
-      dockerfile: backend/Dockerfile
+      dockerfile: Dockerfile.backend
     container_name: alalloy-backend
-    restart: unless-stopped
+    restart: always
     ports:
       - "8001:8001"
+    env_file:
+      - .env
     environment:
       - BACKEND_HOST=0.0.0.0
       - BACKEND_PORT=8001
-      - FRONTEND_URL=http://localhost
-    env_file:
-      - .env
     volumes:
-      # 日志持久化
       - ./logs:/app/logs
-      # 报告持久化
-      - ./backend/reports:/app/backend/reports
+      - ./backend/reports:/app/reports
     networks:
       - alalloy-network
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/docs')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 40s
 
-  # ---- 前端服务 ----
+  # 前端服务
   frontend:
+    image: 192.168.6.104:5000/alalloy-agent-frontend:latest
     build:
-      context: ./web
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        VITE_BACKEND_HOST: backend
+        VITE_BACKEND_PORT: "8001"
+        DEV_MODE: ${DEV_MODE:-false}
     container_name: alalloy-frontend
-    restart: unless-stopped
+    restart: always
     ports:
-      - "80:80"
+      - "8080:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - alalloy-network
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/"]
       interval: 30s
-      timeout: 10s
+      timeout: 3s
       retries: 3
+      start_period: 10s
 
 networks:
   alalloy-network:

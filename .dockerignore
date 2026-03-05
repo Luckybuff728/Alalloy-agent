@@ -1,54 +1,50 @@
-# ================================
-# Docker 构建忽略文件
-# ================================
+# Python 缓存
+**/__pycache__/
+**/*.py[cod]
+**/*.pyo
+**/*.so
+**/.Python
+**/*.egg-info/
 
-# Git
-.git
-.gitignore
-
-# 环境变量（敏感信息）
-.env
-
-# Python
-__pycache__
-*.py[cod]
-*$py.class
-*.so
-.Python
-*.egg-info
-.eggs
+# 虚拟环境
 venv/
 .venv/
 env/
 
-# Node.js
-node_modules/
+# Node.js 依赖（大量文件，构建时单独 npm install）
+frontend/node_modules/
 web/node_modules/
 
-# 构建产物
+# 前端构建产物
+frontend/.nuxt/
+frontend/.output/
+frontend/dist/
+web/.nuxt/
+web/.output/
 web/dist/
-web/build/
 
 # 日志
 logs/
 *.log
 
-# IDE
+# 测试和报告
+backend/reports/
+backend/test_*.py
+backend/check_*.py
+
+# 开发工具
 .vscode/
 .idea/
+*.swp
+*.swo
 
-# 参考资料（不需要打包）
-langchain_reference/
-langchain_src/
-langgraph-main/
-doc/
-
-# 测试文件
-*.test.py
-*_test.py
-
-# 临时文件
-*.tmp
-*.temp
+# 系统文件
 .DS_Store
 Thumbs.db
+
+# 环境变量（不打入镜像）
+.env
+
+# Git
+.git/
+.gitignore

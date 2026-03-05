@@ -209,3 +209,9 @@ async def root():
         "docs": "/docs",
         "ws_endpoint": "/ws/chat/{session_id}",
     }
+
+
+@app.get("/health")
+async def health():
+    """健康检查接口（供 Docker / 负载均衡器使用）"""
+    return {"status": "ok"}

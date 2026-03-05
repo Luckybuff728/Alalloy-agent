@@ -172,7 +172,7 @@ const examples = EXAMPLE_QUESTIONS
    Layout root
 ──────────────────────────────────── */
 .welcome-hero {
-  padding: 24px 0 16px;
+  padding: 0;
   width: 100%;
   max-width: 780px;
 }
@@ -189,7 +189,7 @@ const examples = EXAMPLE_QUESTIONS
   display: flex;
   align-items: center;
   gap: 18px;
-  margin-bottom: 22px;
+  margin-bottom: 28px;
 }
 
 /* ── 原子轨道 Logo ── */
@@ -284,14 +284,14 @@ const examples = EXAMPLE_QUESTIONS
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 10px;
-  margin-bottom: 22px;
+  margin-bottom: 28px;
 }
 
 .cap-card {
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  padding: 13px 16px;
+  padding: 16px 18px;
   background: var(--bg-primary);
   border: 1px solid var(--border-light);
   border-radius: 12px;
@@ -394,7 +394,7 @@ const examples = EXAMPLE_QUESTIONS
 .question-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 9px;
 }
 
 .question-card {
@@ -402,7 +402,7 @@ const examples = EXAMPLE_QUESTIONS
   align-items: center;
   gap: 12px;
   width: 100%;
-  padding: 11px 16px;
+  padding: 13px 18px;
   background: var(--bg-secondary);
   border: 1px dashed var(--border-light);
   border-radius: 11px;

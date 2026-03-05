@@ -168,40 +168,27 @@ const userName = computed(() => authStore.user?.display_name || authStore.user?.
 const userId = computed(() => authStore.user?.id)
 const userInitial = computed(() => (userName.value || 'U')[0].toUpperCase())
 
-// 自动分组逻辑 (简单版，假设后端返回Flat List)
-// 如果后端已经分组，直接用。目前假设后端返回 List[Session]
 const groupedSessions = computed(() => {
-  const groups = {
-    '今天': [],
-    '昨天': [],
-    '7天内': [],
-    '更早': []
+  // 用固定时间点避免 setHours 副作用修改同一对象
+  const now = Date.now()
+  const todayStart   = new Date(new Date().setHours(0, 0, 0, 0)).getTime()
+  const yesterdayStart = todayStart - 86400000
+  const weekStart    = todayStart - 86400000 * 6  // 今天+昨天+5天=近7天
+
+  const groups = { '今天': [], '昨天': [], '近7天': [], '更早': [] }
+
+  for (const session of sessions.value) {
+    const t = new Date(session.updated_at).getTime()
+    if (t >= todayStart)       groups['今天'].push(session)
+    else if (t >= yesterdayStart) groups['昨天'].push(session)
+    else if (t >= weekStart)   groups['近7天'].push(session)
+    else                       groups['更早'].push(session)
   }
-  
-  // 简单时间处理
-  const now = new Date()
-  const todayStart = new Date(now.setHours(0,0,0,0))
-  const yesterdayStart = new Date(todayStart.getTime() - 86400000)
-  const weekStart = new Date(todayStart.getTime() - 86400000 * 7)
-  
-  sessions.value.forEach(session => {
-    const time = new Date(session.updated_at)
-    if (time >= todayStart) {
-      groups['今天'].push(session)
-    } else if (time >= yesterdayStart) {
-      groups['昨天'].push(session)
-    } else if (time >= weekStart) {
-      groups['7天内'].push(session)
-    } else {
-      groups['更早'].push(session) // 实际上 7天内包含了昨天，这里简单分
-    }
-  })
-  
-  // 移除空组
-  Object.keys(groups).forEach(key => {
+
+  // 移除空组，保持显示顺序
+  for (const key of Object.keys(groups)) {
     if (groups[key].length === 0) delete groups[key]
-  })
-  
+  }
   return groups
 })
 
@@ -233,12 +220,27 @@ const getStatusText = (status) => {
 const formatTime = (timeStr) => {
   if (!timeStr) return ''
   const date = new Date(timeStr)
-  return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
+  const now = new Date()
+  const isToday = date.toDateString() === now.toDateString()
+  const hhmm = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
+  if (isToday) return hhmm
+  const mm = (date.getMonth() + 1).toString().padStart(2, '0')
+  const dd = date.getDate().toString().padStart(2, '0')
+  return `${mm}/${dd} ${hhmm}`
 }
 
 const handleCommand = async (cmd, session) => {
   if (cmd === 'archive') {
-    await archiveSession(session.id)
+    try {
+      await ElMessageBox.confirm('归档后会话仍可查看，但不再显示在默认列表中。', '归档会话', {
+        confirmButtonText: '归档',
+        cancelButtonText: '取消',
+        type: 'info'
+      })
+      await archiveSession(session.id)
+    } catch {
+      // 用户取消，忽略
+    }
   } else if (cmd === 'rename') {
     ElMessageBox.prompt('请输入新名称', '重命名', {
       inputValue: session.title,

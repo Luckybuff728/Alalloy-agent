@@ -63,7 +63,7 @@ function renderTableBlock(tableLines) {
     .map((row) => `<tr>${row.map((c) => `<td>${c}</td>`).join('')}</tr>`)
     .join('')}</tbody>`
 
-  return `<table class="lite-table">${thead}${tbody}</table>`
+  return `<div class="lite-table-wrap"><table class="lite-table">${thead}${tbody}</table></div>`
 }
 
 // ── 主渲染函数 ───────────────────────────────────────────────

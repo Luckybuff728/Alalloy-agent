@@ -80,6 +80,18 @@ export function useMultiAgent() {
   // 挂件缓冲队列（用于 chat_complete 后批量挂载挂件）
   const widgetQueue = ref([])
 
+  // ==================== 内部状态重置 ====================
+  // 切换/新建会话时，清理所有轮次内部状态，防止跨会话污染
+  const _resetSessionState = () => {
+    emittedToolResults.value.clear()
+    widgetQueue.value = []
+    streamingMessage.value = null
+    isAgentTyping.value = false
+    activeTool.value = null
+    // 清空 HITL 聚合器（普通对象，直接清空 key）
+    for (const k of Object.keys(_hitlAccumulator)) delete _hitlAccumulator[k]
+  }
+
   // 会话完成 (通过后端 REST API)
   const completeCurrentSession = async () => {
     if (!sessionId.value) return
@@ -147,9 +159,9 @@ export function useMultiAgent() {
       sessionId.value = null
       clientId.value = null
       currentAgent.value = 'System'
-      isAgentTyping.value = false
       messages.value = []
       resultsStore.clearAll()
+      _resetSessionState()
     } else {
       console.log('[ChatAgent] 检测到重连同一会话，保留现有 UI 内容')
     }
@@ -293,18 +305,19 @@ export function useMultiAgent() {
 
       // ==================== 标准聊天事件 ====================
       case 'chat_start':
-        // 开启新会话前，强制结束所有历史消息的流式状态，清理光标残留
-        messages.value.forEach(m => {
-          if (m.isStreaming) m.isStreaming = false
-        })
-        emittedToolResults.value.clear()  // 重置去重集合
+        // 强制结束所有历史消息的流式状态，清理光标残留
+        messages.value.forEach(m => { if (m.isStreaming) m.isStreaming = false })
+        // 重置本轮内部状态（去重集合、widget 缓冲、旧 streamingMessage）
+        emittedToolResults.value.clear()
+        widgetQueue.value = []
+        streamingMessage.value = null
 
         isAgentTyping.value = true
         currentAgent.value = '🔀 智能路由'
         streamingMessage.value = {
+          id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
           type: 'agent',
           agent: currentAgent.value,
-          // V4: 使用 contentBlocks 替代 content + tools，实现按时间顺序渲染
           contentBlocks: [],
           isStreaming: true,
           isThinking: false,
@@ -609,17 +622,16 @@ export function useMultiAgent() {
 
   // ==================== 消息操作 ====================
 
+  const _genId = () => `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+
   const addMessage = (msg) => {
-    messages.value.push({
-      id: Date.now() + Math.random(),
-      ...msg
-    })
+    messages.value.push({ id: _genId(), ...msg })
   }
 
   const createNewAgentMessage = () => ({
+    id: _genId(),
     type: 'agent',
     agent: currentAgent.value,
-    // V4: 使用 contentBlocks 替代 content + tools
     contentBlocks: [],
     isStreaming: true,
     isThinking: false,
@@ -685,6 +697,21 @@ export function useMultiAgent() {
     }
   }
 
+  /**
+   * 从用户消息文本提取会话标题（不超过 20 字）
+   * 在标点/空格处自然截断，确保标题语义完整
+   */
+  const _extractTitle = (text) => {
+    const cleaned = text.replace(/[\r\n]+/g, ' ').replace(/\s{2,}/g, ' ').trim()
+    if (cleaned.length <= 20) return cleaned
+    const slice = cleaned.slice(0, 20)
+    const lastBreak = Math.max(
+      slice.lastIndexOf('，'), slice.lastIndexOf('。'), slice.lastIndexOf('？'),
+      slice.lastIndexOf('！'), slice.lastIndexOf('、'), slice.lastIndexOf(' ')
+    )
+    return lastBreak > 8 ? slice.slice(0, lastBreak) : slice + '…'
+  }
+
   const sendMessage = (content) => {
     if (!content?.trim()) return
     if (!isConnected.value) {
@@ -692,9 +719,15 @@ export function useMultiAgent() {
       return
     }
 
-    const hasUserMessage = messages.value.some(m => m.type === 'user')
-    if (!hasUserMessage) {
+    const isFirstMessage = !messages.value.some(m => m.type === 'user')
+
+    if (isFirstMessage) {
+      // 清除欢迎占位消息
       messages.value = messages.value.filter(m => !(m.type === 'agent' && m.agent === 'System'))
+      // 立即用用户消息内容更新标题（无需等待 AI 回复）
+      if (sessionId.value) {
+        updateSessionTitleViaAPI(sessionId.value, _extractTitle(content))
+      }
     }
 
     messages.value.forEach(m => { if (m.isStreaming) m.isStreaming = false })
@@ -705,13 +738,11 @@ export function useMultiAgent() {
       timestamp: new Date().toISOString()
     })
 
-    const message = {
+    wsSend({
       type: 'chat_message',
       content: content,
       session_id: sessionId.value
-    }
-
-    wsSend(message)
+    })
   }
 
   const sendInteraction = (payload) => {

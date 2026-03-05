@@ -162,16 +162,36 @@ const {
   shouldReconnect
 } = useMultiAgent()
 
+// 追踪待发送 watcher，切换会话时可主动取消
+let _pendingSendUnwatch = null
+let _pendingSendTimer = null
+
+const _clearPendingSend = () => {
+  if (_pendingSendUnwatch) { _pendingSendUnwatch(); _pendingSendUnwatch = null }
+  if (_pendingSendTimer) { clearTimeout(_pendingSendTimer); _pendingSendTimer = null }
+}
+
 const handleSendMessage = async (message) => {
   if (!isConnected.value) {
-    // 新对话流程: 先创建会话，再连接 WS，最后发送消息
-    await createAndConnect(authStore.token)
-    const unwatch = watch(() => isConnected.value && sessionId.value, (ready) => {
-      if (ready) {
+    // 取消上一个未完成的等待（防止消息发到错误会话）
+    _clearPendingSend()
+
+    const session = await createAndConnect(authStore.token)
+    if (!session) return  // createAndConnect 已弹错误提示
+
+    // 等待连接就绪后发送，10s 超时防止永久挂起
+    _pendingSendUnwatch = watch(
+      () => isConnected.value && sessionId.value,
+      (ready) => {
+        if (!ready) return
+        _clearPendingSend()
         sendMessage(message)
-        unwatch()
       }
-    })
+    )
+    _pendingSendTimer = setTimeout(() => {
+      _clearPendingSend()
+      ElMessage.warning('连接超时，请重试')
+    }, 10000)
   } else {
     sendMessage(message)
   }
@@ -243,13 +263,13 @@ const handleSessionSelect = (id) => {
 }
 
 const handleNewSession = () => {
+    // 取消任何待发送的消息 watcher，防止发到新会话
+    _clearPendingSend()
     router.replace({ query: { ...route.query, session_id: undefined } })
     if (isConnected.value) disconnect()
-    // 必须显式清空 sessionId，否则 handleSessionSelect 的 guard 会误判为"已在该会话"
     sessionId.value = null
     if (messages) messages.value = []
     if (clearResults) clearResults()
-    // sessionParams 已在重构中移除，不再需要手动重置
     currentAgent.value = 'System'
 }
 
@@ -268,6 +288,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  _clearPendingSend()
   disconnect()
   window.removeEventListener('mouseup', stopResize)
   window.removeEventListener('resize', handleWindowResize)

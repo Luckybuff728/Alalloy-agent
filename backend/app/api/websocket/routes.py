@@ -2,17 +2,33 @@
 WebSocket 路由
 
 处理 WebSocket 连接和消息分发。
-支持 chat（正常对话）和 resume（HITL 恢复）两种消息类型。
 
 前端连接格式：
     ws://host:port/ws/chat?token=xxx&session_id=xxx
     token 和 session_id 均通过 query 参数传递。
 
-隐藏问题防护：
-1. 会话恢复时的消息序列化/反序列化
-2. 空状态处理（新会话）
-3. 工具结果的结构化提取
-4. 大消息列表的截断处理
+消息类型（前端 → 后端）：
+    chat_message      用户文本输入。若图处于 interrupt 挂起，自动转为 Command(resume=...)；
+                      否则作为新轮次 HumanMessage 发起 invoke。
+    resume_interrupt  交互挂件（guidance_widget / Calphad 审批）的结构化选择结果，
+                      直接转为 Command(resume={"decisions": [...]})。
+    stop_generate     取消当前正在运行的流式任务。
+    save_ui_snapshot  保存前端 UI 快照到 Supabase。
+    ping              心跳，返回 pong。
+
+LangGraph 中断/恢复规范（interrupts.mdx / human-in-the-loop.mdx）：
+    - interrupt() 挂起后，必须用同一 thread_id + Command(resume=...) 恢复。
+    - 不能在挂起状态下发起新的 invoke，否则子图消息不提交到父图 state，
+      导致 thinker 看不到已有上下文，产生重复执行循环。
+    - resume 值透传给 interrupt() 作为返回值；HITL middleware 要求
+      {"decisions": [...]} 格式，每个 decision 为 approve / edit / reject。
+
+防御性处理：
+    1. 会话恢复时的消息序列化/反序列化
+    2. 空状态处理（新会话）
+    3. 工具结果的结构化提取
+    4. 大消息列表的截断处理
+    5. 消息链完整性修复（缺失 ToolMessage 时自动补占位符）
 """
 
 import os
@@ -40,6 +56,29 @@ DEV_MODE = os.getenv("DEV_MODE", "false").lower() == "true"
 _active_stream_tasks: Dict[str, asyncio.Task] = {}
 
 
+async def _persist_session_title(session_id: str, title: str) -> None:
+    """直接从后端将会话标题写入 Supabase（asyncio.to_thread 非阻塞）。
+    
+    作为前端 REST 调用的双保险：即使前端在 AI 回复结束时已断开，标题依然能持久化。
+    """
+    from ...infra.supabase_client import get_supabase_client, is_fallback_mode
+    from ..rest import _fallback_sessions
+
+    client = get_supabase_client()
+    if client and not is_fallback_mode():
+        def _write():
+            client.table("sessions").update({"title": title}).eq("id", session_id).execute()
+        try:
+            await asyncio.to_thread(_write)
+            logger.info(f"标题已持久化(后端): session={session_id}, title={title}")
+        except Exception as e:
+            logger.warning(f"后端持久化标题失败: session={session_id}, err={e}")
+    else:
+        session = _fallback_sessions.get(session_id)
+        if session:
+            session["title"] = title
+
+
 async def _run_stream(
     websocket: WebSocket,
     graph,
@@ -54,6 +93,9 @@ async def _run_stream(
     try:
         async for event in stream_graph_events(graph, input_data, config):
             await websocket.send_json(event)
+            # 收到 LLM 精炼标题后，后端同步持久化（双保险，前端同步走 REST 路径）
+            if event.get("type") == "session_title_updated" and event.get("title"):
+                asyncio.create_task(_persist_session_title(session_id, event["title"]))
     except asyncio.CancelledError:
         logger.info(f"[WS] 流式任务已取消: session={session_id}")
         raise
@@ -92,121 +134,112 @@ def set_graph(graph):
     logger.info("WebSocket 路由: 图实例已注入")
 
 
-def _adapt_resume_value(value):
+def _adapt_resume_value(value, chat_text: str = None, pending_interrupts: list = None):
     """
     将前端 resume 值适配为 LangGraph Command(resume=...) 所需的格式。
 
-    HITL middleware 要求 resume 值为 {"decisions": [...]} 字典（非裸列表）。
-    每个 decision 支持 approve / edit / reject 三种类型。
+    两种中断机制使用不同的 resume 格式（LangGraph 官方规范）：
 
-    支持的前端格式:
-    1. HITL wrapped: {"decisions": [{"type": "approve"}]} — 直接透传
-    2. HITL 裸列表: [{"type": "approve"}] — 包装为 {"decisions": [...]}
-    3. guidance_widget 选择: {"type":"option","id":"predict","label":"预测"} — 转为 reject decision 传递用户选择
+    ┌─────────────────────────────┬──────────────────────────────────────┐
+    │ 中断来源                    │ resume 格式                          │
+    ├─────────────────────────────┼──────────────────────────────────────┤
+    │ show_guidance_widget        │ 直接透传给 interrupt() 返回值        │
+    │  （工具内 interrupt()）     │                                      │
+    ├─────────────────────────────┼──────────────────────────────────────┤
+    │ HumanInTheLoopMiddleware    │ {"decisions": [{type, ...}]}         │
+    │ （Calphad 提交类工具）      │                                      │
+    └─────────────────────────────┴──────────────────────────────────────┘
     """
-    import json as _json
+    if pending_interrupts is None:
+        pending_interrupts = []
+
+    is_guidance_widget = any(i.get("type") == "guidance_widget" for i in pending_interrupts)
+
+    # ── guidance_widget 中断：值直接透传给 interrupt() ────────────────────
+    if is_guidance_widget:
+        if chat_text is not None:
+            logger.info(f"Resume: guidance_widget ← chat_text={chat_text[:50]}")
+            return {"text": chat_text}
+        logger.info(f"Resume: guidance_widget ← value={str(value)[:80]}")
+        return value
+
+    # ── HITL 中断（Calphad 等）：需要 decisions 包装 ─────────────────────
+    if chat_text is not None:
+        logger.info(f"Resume: HITL ← reject(chat_text={chat_text[:50]})")
+        return {"decisions": [{"type": "reject", "message": f"用户发送消息：{chat_text}"}]}
 
     if isinstance(value, dict) and "decisions" in value:
-        logger.info(f"Resume: HITL decisions dict, {len(value['decisions'])} decisions")
         return value
 
     if isinstance(value, list):
-        logger.info(f"Resume: HITL decisions list → wrap, {len(value)} decisions")
         return {"decisions": value}
 
-    if not isinstance(value, dict):
-        logger.warning(f"Resume: unexpected type {type(value).__name__}, wrap as approve")
-        return {"decisions": [{"type": "approve"}]}
-
-    if "id" in value or "label" in value:
-        label = value.get("label", value.get("id", "未知"))
-        detail = _json.dumps(value, ensure_ascii=False)
-        logger.info(f"Resume: guidance_widget option → reject decision, label={label}")
-        return {
-            "decisions": [
-                {
-                    "type": "reject",
-                    "message": f"用户通过引导挂件选择了：{label}（详情：{detail}）",
-                }
-            ]
-        }
-
-    if value.get("type") == "form" and "data" in value:
-        detail = _json.dumps(value["data"], ensure_ascii=False)
-        logger.info(f"Resume: guidance_widget form → reject decision")
-        return {
-            "decisions": [
-                {
-                    "type": "reject",
-                    "message": f"用户通过引导挂件提交了表单参数：{detail}",
-                }
-            ]
-        }
-
-    logger.warning(f"Resume: unrecognized dict format, wrap as approve")
+    # 兜底
+    logger.warning(f"Resume: 未识别格式, value={str(value)[:80]}")
     return {"decisions": [{"type": "approve"}]}
 
 
 async def _verify_session_ownership(session_id: str, user_id: str) -> tuple[bool, bool]:
     """
-    验证会话是否属于指定用户
-    
-    隐藏问题防护：
-    - 查询失败时返回 (False, False)（安全第一）
-    - 支持 Supabase 和内存降级模式
-    - ★ 区分"会话不存在"和"无权访问"两种情况
-    
-    参数:
-        session_id: 会话 ID
-        user_id: 用户 ID
-    
+    验证会话是否属于指定用户（异步，Supabase 调用通过 asyncio.to_thread 非阻塞）
+
     返回:
-        (session_exists, belongs_to_user) 元组
-        - (False, False): 会话不存在（新会话）
-        - (True, True): 会话存在且属于该用户
-        - (True, False): 会话存在但不属于该用户（无权访问）
+        (session_exists, belongs_to_user)
+        - (False, False): 会话不存在
+        - (True, True):   存在且属于该用户
+        - (True, False):  存在但不属于该用户
+    
+    注意：Supabase 网络/超时异常 → fail-open (True, True)，
+    避免因服务抖动将合法用户锁出；明确无结果 → (False, False)。
     """
     from ...infra.supabase_client import get_supabase_client, is_fallback_mode
     from ..rest import _fallback_sessions
-    
-    # 尝试 Supabase 查询
+
     client = get_supabase_client()
     if client and not is_fallback_mode():
-        try:
-            result = client.table("sessions")\
-                .select("user_id")\
-                .eq("id", session_id)\
-                .single()\
+        def _query():
+            # maybe_single() 在 0 行时返回 None，不抛 PGRST116
+            return (
+                client.table("sessions")
+                .select("user_id")
+                .eq("id", session_id)
+                .maybe_single()
                 .execute()
-            
-            if result.data:
+            )
+        try:
+            result = await asyncio.to_thread(_query)
+            if result and result.data:
                 belongs = result.data.get("user_id") == user_id
                 return (True, belongs)
-            else:
-                # 会话不存在
-                return (False, False)
+            # 0 行 → 会话不存在
+            return (False, False)
         except Exception as e:
-            # ★ 捕获 "No rows found" 错误（Supabase single() 无结果时抛出）
-            if "No rows" in str(e) or "0 rows" in str(e):
-                return (False, False)
-            logger.debug(f"Supabase 验证会话归属失败: {e}")
-            # 查询失败，安全起见返回无权访问
-            return (True, False)
-    
-    # 降级到内存存储
+            # 网络/超时等基础设施错误 → fail-open，记录警告但允许访问
+            logger.warning(f"Supabase 会话归属查询异常（允许访问）: session={session_id}, err={e}")
+            return (True, True)
+
+    # 内存降级模式
     session = _fallback_sessions.get(session_id)
     if session:
         belongs = session.get("user_id") == user_id
         return (True, belongs)
-    
-    # 会话不存在（新会话）
     return (False, False)
 
 
 def _extract_pending_interrupts(state) -> List[Dict[str, Any]]:
     """
-    提取待确认的 interrupt（用于恢复 HITL 挂件）。
-    支持 guidance_widget 和 HumanInTheLoopMiddleware 标准 payload。
+    提取待确认的 interrupt（用于判断当前图是否处于挂起状态）。
+
+    LangGraph 官方规范（interrupts.mdx）：
+    - interrupt() 挂起后，state.tasks 中的任务会携带 .interrupts 列表。
+    - 每个 Interrupt 对象有 .value（JSON-serializable payload）和 .id。
+    - 只要 tasks 中存在未完成的 interrupt，图就处于"挂起等待 resume"状态。
+    - 恢复必须用同一 thread_id + Command(resume=...) —— 不能发起新 invoke。
+
+    支持三种 payload 类型：
+    1. HumanInTheLoopMiddleware：{"action_requests": [...], "review_configs": [...]}
+    2. guidance_widget（旧格式）：{"interrupt_type": "guidance_widget", ...}
+    3. 原生 interrupt()：任意 JSON 值（直接存储在 .value 中）
     """
     interrupts = []
 
@@ -219,13 +252,21 @@ def _extract_pending_interrupts(state) -> List[Dict[str, Any]]:
 
         for intr in task.interrupts:
             v = intr.value
-            if not isinstance(v, dict):
-                continue
+            intr_id = getattr(intr, "id", None)
 
-            if v.get("interrupt_type") == "guidance_widget":
-                interrupts.append({"type": "guidance_widget", "payload": v})
-            elif "action_requests" in v:
-                interrupts.append({"type": "hitl_review", "payload": v})
+            if isinstance(v, dict):
+                if "action_requests" in v:
+                    # HumanInTheLoopMiddleware 标准格式
+                    interrupts.append({"type": "hitl_review", "id": intr_id, "payload": v})
+                elif v.get("interrupt_type") == "guidance_widget":
+                    # guidance_widget（向后兼容）
+                    interrupts.append({"type": "guidance_widget", "id": intr_id, "payload": v})
+                else:
+                    # 原生 interrupt() 自定义 dict payload
+                    interrupts.append({"type": "generic", "id": intr_id, "payload": v})
+            else:
+                # 原生 interrupt() 非 dict 值（字符串、布尔等）
+                interrupts.append({"type": "generic", "id": intr_id, "payload": v})
 
     return interrupts
 
@@ -302,77 +343,65 @@ async def _fix_message_chain_if_needed(graph, config: Dict[str, Any]) -> None:
 
 async def _save_ui_snapshot(session_id: str, ui_snapshot: Dict[str, Any]) -> bool:
     """
-    保存 UI 快照到 Supabase sessions.metadata
-    
-    参数:
-        session_id: 会话 ID
-        ui_snapshot: 前端序列化的 UI 状态（messages + contentBlocks）
-    
-    返回:
-        是否保存成功
+    保存 UI 快照到 Supabase sessions.metadata（asyncio.to_thread 避免阻塞事件循环）
     """
     from ...infra.supabase_client import get_supabase_client, is_fallback_mode
     from ..rest import _fallback_sessions
-    
+
     client = get_supabase_client()
     if client and not is_fallback_mode():
+        def _write():
+            # maybe_single() 在 0 行时返回 None（不抛 PGRST116）
+            r = client.table("sessions").select("metadata").eq("id", session_id).maybe_single().execute()
+            existing = {}
+            if r and r.data:
+                existing = r.data.get("metadata") or {}
+            existing["ui_snapshot"] = ui_snapshot
+            existing["ui_snapshot_updated_at"] = datetime.now(timezone.utc).isoformat()
+            client.table("sessions").update({"metadata": existing}).eq("id", session_id).execute()
+
         try:
-            # 获取现有 metadata
-            result = client.table("sessions").select("metadata").eq("id", session_id).single().execute()
-            existing_metadata = result.data.get("metadata", {}) if result.data else {}
-            
-            # 合并 ui_snapshot 到 metadata
-            existing_metadata["ui_snapshot"] = ui_snapshot
-            existing_metadata["ui_snapshot_updated_at"] = datetime.now(timezone.utc).isoformat()
-            
-            # 更新 metadata
-            client.table("sessions").update({"metadata": existing_metadata}).eq("id", session_id).execute()
+            await asyncio.to_thread(_write)
             logger.info(f"UI 快照已保存: session={session_id}, messages={len(ui_snapshot.get('messages', []))}")
             return True
         except Exception as e:
-            logger.warning(f"保存 UI 快照失败: {e}")
+            logger.warning(f"保存 UI 快照失败: session={session_id}, err={e}")
             return False
-    else:
-        # 内存模式
-        session = _fallback_sessions.get(session_id)
-        if session:
-            if "metadata" not in session:
-                session["metadata"] = {}
-            session["metadata"]["ui_snapshot"] = ui_snapshot
-            session["metadata"]["ui_snapshot_updated_at"] = datetime.now(timezone.utc).isoformat()
-            logger.info(f"UI 快照已保存 (内存): session={session_id}")
-            return True
-        return False
+
+    # 内存降级
+    session = _fallback_sessions.get(session_id)
+    if session:
+        session.setdefault("metadata", {})
+        session["metadata"]["ui_snapshot"] = ui_snapshot
+        session["metadata"]["ui_snapshot_updated_at"] = datetime.now(timezone.utc).isoformat()
+        return True
+    return False
 
 
 async def _get_ui_snapshot(session_id: str) -> Optional[Dict[str, Any]]:
     """
-    从 Supabase sessions.metadata 获取 UI 快照
-    
-    参数:
-        session_id: 会话 ID
-    
-    返回:
-        UI 快照数据，或 None
+    从 Supabase sessions.metadata 获取 UI 快照（asyncio.to_thread 避免阻塞事件循环）
     """
     from ...infra.supabase_client import get_supabase_client, is_fallback_mode
     from ..rest import _fallback_sessions
-    
+
     client = get_supabase_client()
     if client and not is_fallback_mode():
+        def _read():
+            return client.table("sessions").select("metadata").eq("id", session_id).maybe_single().execute()
+
         try:
-            result = client.table("sessions").select("metadata").eq("id", session_id).single().execute()
-            if result.data:
-                metadata = result.data.get("metadata", {})
-                return metadata.get("ui_snapshot")
+            result = await asyncio.to_thread(_read)
+            if result and result.data:
+                return (result.data.get("metadata") or {}).get("ui_snapshot")
         except Exception as e:
-            logger.debug(f"获取 UI 快照失败: {e}")
-            return None
-    else:
-        # 内存模式
-        session = _fallback_sessions.get(session_id)
-        if session:
-            return session.get("metadata", {}).get("ui_snapshot")
+            logger.debug(f"获取 UI 快照失败: session={session_id}, err={e}")
+        return None
+
+    # 内存降级
+    session = _fallback_sessions.get(session_id)
+    if session:
+        return session.get("metadata", {}).get("ui_snapshot")
     return None
 
 
@@ -728,31 +757,74 @@ async def websocket_chat(websocket: WebSocket):
                 # 若有正在运行的流式任务，先取消（防止并发冲突）
                 await _cancel_active_stream(session_id)
 
-                # ★ 会话恢复修复：检查并修复消息链完整性
-                await _fix_message_chain_if_needed(_compiled_graph, config)
+                # ── 官方规范（interrupts.mdx）────────────────────────────────────
+                # 图处于 interrupt 挂起时，必须用同一 thread_id + Command(resume=...)
+                # 恢复，不能发起新的 invoke（否则子图消息不会提交到父图 state，
+                # thinker 看不到已有上下文，产生重复执行循环）。
+                #
+                # 当用户通过文本输入而不是交互挂件恢复时，把文字消息作为 reject
+                # decision 的 message 传递，让 HITL 中间件把用户意图注入对话历史。
+                # ─────────────────────────────────────────────────────────────────
+                try:
+                    graph_state = await _compiled_graph.aget_state(config)
+                    pending_interrupts = _extract_pending_interrupts(graph_state)
+                except Exception as e:
+                    logger.warning(f"WS 获取图状态失败，按无中断处理: {e}")
+                    pending_interrupts = []
 
-                input_data = {
-                    "messages": [HumanMessage(content=user_message)]
-                }
+                if pending_interrupts:
+                    is_guidance = any(i.get("type") == "guidance_widget" for i in pending_interrupts)
+                    resume_value = _adapt_resume_value(
+                        None, chat_text=user_message, pending_interrupts=pending_interrupts
+                    )
+                    if is_guidance:
+                        # guidance_widget 中断 + 用户文字：
+                        # resume 解除中断（show_guidance_widget 返回 Command 结束子图），
+                        # 同时 update 注入 HumanMessage，thinker 拿到用户最新指令做路由决策。
+                        input_data = Command(
+                            resume=resume_value,
+                            update={"messages": [HumanMessage(content=user_message)]},
+                        )
+                    else:
+                        # HITL 中断（Calphad 等）→ 仅 resume，用 reject decision 传递意图
+                        input_data = Command(resume=resume_value)
+                    logger.info(
+                        f"WS 图挂起({len(pending_interrupts)} 个中断, "
+                        f"guidance={is_guidance})，"
+                        f"chat_message → Command(resume): session={session_id}"
+                    )
+                else:
+                    # 图空闲 → 新轮次 invoke，附带完整 HumanMessage
+                    await _fix_message_chain_if_needed(_compiled_graph, config)
+                    input_data = {"messages": [HumanMessage(content=user_message)]}
+                    logger.info(f"WS 图空闲，新轮次 invoke: session={session_id}")
 
-                # ★ 在后台 Task 中运行流式处理，主循环可立即继续接收新消息
                 task = asyncio.create_task(
                     _run_stream(websocket, _compiled_graph, input_data, config, session_id)
                 )
                 _active_stream_tasks[session_id] = task
 
-            # ---- HITL 恢复（前端发送 type=resume_interrupt, value=...）----
+            # ---- HITL 恢复（前端发送 type=resume_interrupt，来自交互挂件）----
             elif msg_type in ("resume_interrupt", "resume"):
+                # 交互挂件（guidance_widget / Calphad 审批）的结构化选择结果
                 resume_value = data.get("value") or data.get("resume_value")
 
                 logger.info(
-                    f"WS resume: session={session_id}, value={resume_value}"
+                    f"WS resume_interrupt: session={session_id}, value={str(resume_value)[:80]}"
                 )
 
-                resume_value = _adapt_resume_value(resume_value)
-                resume_command = Command(resume=resume_value)
-
                 await _cancel_active_stream(session_id)
+
+                # 获取当前挂起中断，以便 _adapt_resume_value 构建正确的 edit/reject decision
+                try:
+                    graph_state = await _compiled_graph.aget_state(config)
+                    pending_interrupts = _extract_pending_interrupts(graph_state)
+                except Exception as e:
+                    logger.warning(f"WS resume_interrupt 获取图状态失败: {e}")
+                    pending_interrupts = []
+
+                resume_value = _adapt_resume_value(resume_value, pending_interrupts=pending_interrupts)
+                resume_command = Command(resume=resume_value)
 
                 task = asyncio.create_task(
                     _run_stream(websocket, _compiled_graph, resume_command, config, session_id)

@@ -658,25 +658,32 @@ const toggleThinking = () => {
   font-style: normal;
 }
 
-/* 轻量表格样式 */
+/* 轻量表格：滚动容器防溢出 */
+.thinking-lite-markdown :deep(.lite-table-wrap) {
+  width: 100%;
+  overflow-x: auto;
+  margin: 6px 0;
+  border-radius: 6px;
+  border: 1px solid rgba(100, 116, 139, 0.15);
+}
+
 .thinking-lite-markdown :deep(.lite-table) {
   border-collapse: collapse;
   width: 100%;
-  margin: 6px 0;
+  min-width: 300px;
   font-size: 12.5px;
   font-style: normal;
   line-height: 1.5;
-  border-radius: 6px;
-  overflow: hidden;
 }
 
 .thinking-lite-markdown :deep(.lite-table th),
 .thinking-lite-markdown :deep(.lite-table td) {
   padding: 5px 10px;
-  border: 1px solid rgba(100, 116, 139, 0.2);
+  border: 1px solid rgba(100, 116, 139, 0.15);
   text-align: left;
-  vertical-align: middle;
-  white-space: nowrap;
+  vertical-align: top;
+  white-space: normal;      /* 允许换行，防止溢出 */
+  word-break: break-word;
   color: var(--text-tertiary, #909399);
 }
 
@@ -685,6 +692,7 @@ const toggleThinking = () => {
   font-weight: 600;
   font-size: 12px;
   letter-spacing: 0.02em;
+  white-space: nowrap;      /* 表头不换行，保持紧凑 */
 }
 
 .thinking-lite-markdown :deep(.lite-table tr:nth-child(even) td) {

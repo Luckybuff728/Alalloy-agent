@@ -211,14 +211,15 @@ watch(() => props.isGenerating, (val) => {
   box-sizing: border-box;
 }
 
-/* 欢迎界面容器 */
+/* 欢迎界面容器：垂直居中 */
 .welcome-state {
+  flex: 1;                    /* 占满 chat-messages 剩余高度 */
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-start;
-  padding-top: 24px;
-  padding-bottom: 120px; /* 防止底部被输入框遮挡 */
+  justify-content: center;
+  padding-bottom: 80px;       /* 向上偏移，光学对齐输入框上方 */
+  padding-top: 20px;
 }
 
 .chat-messages::-webkit-scrollbar {

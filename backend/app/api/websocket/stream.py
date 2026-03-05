@@ -34,37 +34,35 @@ def _format_interrupt_event(intr) -> Dict[str, Any]:
     """
     将 interrupt 对象映射为前端 WS 事件。
 
-    HumanInTheLoopMiddleware 的 action_requests 中包含工具名和参数。
-    对 show_guidance_widget 工具：提取 widget 配置，以 guidance_widget 类型发送。
-    对其他工具（Calphad 等）：以 hitl_review 类型发送。
+    支持两种 interrupt 来源：
+
+    1. show_guidance_widget 内置 interrupt()（新规范）
+       payload = {"interrupt_type": "guidance_widget", "widget": {...}}
+       → 直接转发为 guidance_widget 事件
+
+    2. HumanInTheLoopMiddleware（Calphad 提交类工具）
+       payload = {"action_requests": [...], "review_configs": [...]}
+       → 转发为 hitl_review 事件
     """
     v = getattr(intr, "value", intr) if not isinstance(intr, dict) else intr
 
     if not isinstance(v, dict):
         return {"type": "interrupt", "interrupt_type": "generic", "payload": {"value": str(v)}}
 
+    # ── 路径 1：show_guidance_widget 内置 interrupt() ──────────────────────
+    # interrupt() 的 payload 直接包含 interrupt_type + widget 字段
+    if v.get("interrupt_type") == "guidance_widget":
+        return {
+            "type": "interrupt",
+            "interrupt_type": "guidance_widget",
+            "payload": v,  # 直接转发，包含 interrupt_type 和 widget
+        }
+
+    # ── 路径 2：HumanInTheLoopMiddleware（Calphad 等工具）────────────────────
     if "action_requests" in v:
-        for ar in v.get("action_requests", []):
-            tool_name = ar.get("name", "")
-            if tool_name == "show_guidance_widget":
-                args = ar.get("arguments", ar.get("args", {}))
-                return {
-                    "type": "interrupt",
-                    "interrupt_type": "guidance_widget",
-                    "payload": {
-                        "interrupt_type": "guidance_widget",
-                        "widget": {
-                            "type": args.get("widget_type", "options"),
-                            "title": args.get("title", ""),
-                            "message": args.get("message", ""),
-                            "options": args.get("options", []),
-                            "form_fields": args.get("form_fields", []),
-                        },
-                        "action_request": ar,
-                    },
-                }
         return {"type": "interrupt", "interrupt_type": "hitl_review", "payload": v}
 
+    # ── 路径 3：其他原生 interrupt() ─────────────────────────────────────────
     return {"type": "interrupt", "interrupt_type": "generic", "payload": v}
 
 
@@ -212,18 +210,28 @@ async def stream_graph_events(
 
 
 async def _try_generate_title(graph, config: dict):
-    """尝试为会话生成标题（仅在首次对话后）"""
+    """
+    LLM 精炼标题（仅在首次对话完成后触发一次）。
+
+    前端在发送消息时已立即用用户消息内容设置临时标题；
+    此处用 LLM 生成更语义化的标题，覆盖临时标题，提升标题质量。
+
+    触发条件：首轮对话（human_count == 1）且 AI 已有回复（ai_count >= 1）。
+    """
     try:
         from ...utils.title_generator import generate_session_title
+        from langchain_core.messages import HumanMessage as HM, AIMessage as AM
 
         state = await graph.aget_state(config)
         if not state or not hasattr(state, "values"):
             return
 
         messages = state.values.get("messages", [])
-        from langchain_core.messages import HumanMessage as HM
         human_count = sum(1 for m in messages if isinstance(m, HM))
-        if human_count != 1:
+        ai_count    = sum(1 for m in messages if isinstance(m, AM))
+
+        # 仅在首轮且 AI 已回复时执行，防止多轮重复触发或 AI 尚未写入时空跑
+        if human_count != 1 or ai_count < 1:
             return
 
         title = await generate_session_title(messages)
@@ -234,13 +242,13 @@ async def _try_generate_title(graph, config: dict):
         if not session_id:
             return
 
-        logger.info(f"生成会话标题: {session_id} -> {title}")
+        logger.info(f"LLM 精炼标题: session={session_id} -> {title}")
         return {
             "type": "session_title_updated",
             "session_id": session_id,
             "title": title,
         }
     except Exception as e:
-        logger.debug(f"标题生成跳过: {e}")
+        logger.debug(f"标题精炼跳过: {e}")
 
 

@@ -108,9 +108,14 @@ export function useSessions() {
     }
 
     /**
-     * 归档会话
+     * 归档会话（乐观更新，失败回滚）
      */
     const archiveSession = async (sessionId) => {
+        // 乐观更新
+        const session = sessions.value.find(s => s.id === sessionId)
+        const prevStatus = session?.status
+        if (session) session.status = 'archived'
+
         try {
             const resp = await fetch(`${API_BASE_URL}/api/sessions/${sessionId}`, {
                 method: 'PATCH',
@@ -124,8 +129,9 @@ export function useSessions() {
             }
 
             ElMessage.success('会话已归档')
-            await fetchSessions()
         } catch (error) {
+            // 回滚乐观更新
+            if (session && prevStatus !== undefined) session.status = prevStatus
             console.error('Archive error:', error)
             ElMessage.error('归档失败')
         }
@@ -155,9 +161,14 @@ export function useSessions() {
     }
 
     /**
-     * 删除会话
+     * 删除会话（乐观移除，失败回滚）
      */
     const deleteSession = async (sessionId) => {
+        // 保存原始位置和对象，失败时回滚
+        const idx = sessions.value.findIndex(s => s.id === sessionId)
+        const removed = sessions.value[idx]
+        if (idx !== -1) sessions.value.splice(idx, 1)
+
         try {
             const resp = await fetch(`${API_BASE_URL}/api/sessions/${sessionId}`, {
                 method: 'DELETE',
@@ -170,9 +181,9 @@ export function useSessions() {
             }
 
             ElMessage.success('会话已删除')
-            // 本地移除
-            sessions.value = sessions.value.filter(s => s.id !== sessionId)
         } catch (error) {
+            // 回滚：将会话插回原位置
+            if (removed !== undefined) sessions.value.splice(idx, 0, removed)
             console.error('Delete error:', error)
             ElMessage.error('删除失败')
         }
@@ -208,12 +219,14 @@ export function useSessions() {
 
     /**
      * 更新本地会话标题 (乐观更新，供 WS 事件触发)
+     * 同时重新排序，确保最近更新的会话排在前面
      */
     const updateSessionTitle = (sessionId, title) => {
         const session = sessions.value.find(s => s.id === sessionId)
         if (session) {
             session.title = title
             session.updated_at = new Date().toISOString()
+            sessions.value.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))
         }
     }
 

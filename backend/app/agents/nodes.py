@@ -19,6 +19,7 @@ from pathlib import Path
 from langchain_core.messages import SystemMessage
 from langgraph.graph import END
 from langgraph.types import Command
+from langgraph.errors import GraphBubbleUp
 from pydantic import BaseModel, Field
 
 from .state import AlalloyState
@@ -114,10 +115,11 @@ def build_expert_agents(
     """
     构建三个专家的 create_agent 子图。
 
-    HITL 配置:
-        - dataExpert:      show_guidance_widget 触发 HITL interrupt
-        - analysisExpert:  show_guidance_widget + Calphad 提交类工具触发 HITL interrupt
-        - reportWriter:    无工具，无 HITL
+    中断机制:
+        - show_guidance_widget:  return_direct=True + 工具内部 interrupt()，ReAct 执行后立即退出
+        - Calphad 提交类工具:    HumanInTheLoopMiddleware 批量确认
+          HITL 在单个 AIMessage 内将所有 tool_calls 合并为一次 interrupt；
+          提示词要求"并行调用"以确保一次 AIMessage 包含所有提交调用 → 一次确认框。
 
     返回:
         (dataExpert_agent, analysisExpert_agent, reportWriter_agent) 三个编译后的 graph
@@ -134,14 +136,22 @@ def build_expert_agents(
 
     llm = get_llm()
 
+    # GraphBubbleUp（含 GraphInterrupt / NodeInterrupt）继承自 Exception，
+    # 会被 ToolRetryMiddleware 的 except Exception 捕获。
+    # 必须在 on_failure 里重新抛出，否则 interrupt() 信号会被转成 ToolMessage 吞掉。
+    def _tool_on_failure(exc: Exception) -> str:
+        if isinstance(exc, GraphBubbleUp):
+            raise exc
+        return f"工具调用失败 ({type(exc).__name__}): {exc}"
+
     tool_retry_mw = ToolRetryMiddleware(
         max_retries=2,
         backoff_factor=2.0,
         initial_delay=1.0,
         max_delay=60.0,
         jitter=True,
-        retry_on=(ConnectionError, TimeoutError, OSError),
-        on_failure="return_message",
+        retry_on=lambda e: isinstance(e, (ConnectionError, TimeoutError, OSError)),
+        on_failure=_tool_on_failure,
     )
 
     model_retry_mw = ModelRetryMiddleware(
@@ -164,17 +174,13 @@ def build_expert_agents(
         ],
     )
 
-    # --- dataExpert (HITL for guidance widget) ---
+    # --- dataExpert (无 HITL：show_guidance_widget 已内置 interrupt()，不需要 HITL 拦截) ---
     # 流程：query_idme(1次) + 成分推荐(1次) + show_guidance_widget(1次) = ~3次；留有余量
-    dataExpert_hitl = HumanInTheLoopMiddleware(
-        interrupt_on={"show_guidance_widget": True},
-    )
     dataExpert_agent = create_agent(
         model=llm,
         tools=data_expert_tools,
         system_prompt=_load_prompt("dataExpert"),
         middleware=[
-            dataExpert_hitl,
             tool_retry_mw,
             model_retry_mw,
             ModelCallLimitMiddleware(run_limit=8, exit_behavior="end"),
@@ -183,23 +189,21 @@ def build_expert_agents(
         name="dataExpert",
     )
 
-    # --- analysisExpert (HITL for Calphad submit + guidance widget) ---
-    # 流程：models_list(1) + inference×5(5) + 综合(1) + guidance_widget(1) = ~8次
-    # Calphad 场景：submit×5(5) + status×5(5) = ~10次；取较大值并留余量
+    # --- analysisExpert (HITL 用于 Calphad 提交类工具批量确认) ---
+    # 关键：HITL 将单个 AIMessage 内的所有 tool_calls 合并为一次 interrupt。
+    # 提示词要求 LLM 在一次响应中并行调用所有提交工具 → 用户只看到一个确认框。
+    # 流程：models_list(1) + inference×N + guidance(1) + submit×3N(1次批量) + status×3N + guidance(1) = ~20次
     calphad_hitl = calphad_hitl_tools or {
         "calphamesh_submit_scheil_task": True,
         "calphamesh_submit_point_task": True,
         "calphamesh_submit_line_task": True,
     }
-    analysisExpert_hitl = HumanInTheLoopMiddleware(
-        interrupt_on={**calphad_hitl, "show_guidance_widget": True},
-    )
     analysisExpert_agent = create_agent(
         model=llm,
         tools=analysis_expert_tools,
         system_prompt=_load_prompt("analysisExpert"),
         middleware=[
-            analysisExpert_hitl,
+            HumanInTheLoopMiddleware(interrupt_on=calphad_hitl),
             tool_retry_mw,
             model_retry_mw,
             ModelCallLimitMiddleware(run_limit=20, exit_behavior="end"),

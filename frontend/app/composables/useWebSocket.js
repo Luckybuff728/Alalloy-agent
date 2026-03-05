@@ -33,9 +33,6 @@ export function useWebSocket() {
   const heartbeatTimer = ref(null)
   const heartbeatTimeoutTimer = ref(null)
 
-  // 离线消息队列
-  const offlineQueue = ref([])
-
   // 连接信息
   const currentUrl = ref(null)
   const connectionState = ref('disconnected') // 'disconnected' | 'connecting' | 'connected' | 'reconnecting'
@@ -145,21 +142,6 @@ export function useWebSocket() {
   }
 
   /**
-   * 发送离线队列中的消息
-   */
-  const flushOfflineQueue = () => {
-    if (offlineQueue.value.length > 0) {
-      offlineQueue.value.forEach(data => {
-        if (ws.value && ws.value.readyState === WebSocket.OPEN) {
-          ws.value.send(JSON.stringify(data))
-        }
-      })
-
-      offlineQueue.value = []
-    }
-  }
-
-  /**
    * 内部连接方法
    */
   const connectInternal = (url, onMessage) => {
@@ -193,13 +175,8 @@ export function useWebSocket() {
       console.log('[WebSocket] 连接成功')
       isConnected.value = true
       connectionState.value = 'connected'
-      reconnectAttempts.value = 0 // 重置重连计数
-
-      // 启动心跳
+      reconnectAttempts.value = 0
       startHeartbeat()
-
-      // 业务调整：不再自动发送离线队列消息，由业务层决定重发时机或由用户操作
-      // flushOfflineQueue()
     }
 
     ws.value.onmessage = (event) => {
@@ -237,7 +214,16 @@ export function useWebSocket() {
       isConnected.value = false
       stopHeartbeat()
 
-      // 非正常关闭且允许重连，则自动重连
+      // 认证失败（4001/4003）或会话权限错误（4008）→ 禁止自动重连，避免无限重试
+      const authErrorCodes = new Set([4001, 4003, 4008])
+      if (authErrorCodes.has(event.code)) {
+        shouldReconnect.value = false
+        connectionState.value = 'disconnected'
+        console.warn(`[WebSocket] 认证/权限错误 (code=${event.code})，已禁用自动重连`)
+        return
+      }
+
+      // 非正常关闭且允许重连 → 指数退避重连
       if (!event.wasClean && shouldReconnect.value) {
         console.log('[WebSocket] 检测到异常断开，准备重连')
         scheduleReconnect()
@@ -259,26 +245,14 @@ export function useWebSocket() {
   }
 
   /**
-   * 发送消息（支持离线队列）
+   * 发送消息
    * @param {object} data - 要发送的数据
-   * @param {boolean} queueIfOffline - 离线时是否加入队列
    */
-  const send = (data, queueIfOffline = true) => {
+  const send = (data) => {
     if (ws.value && ws.value.readyState === WebSocket.OPEN) {
       ws.value.send(JSON.stringify(data))
     } else {
-      console.warn('[WebSocket] 连接未建立')
-
-      if (queueIfOffline && connectionState.value === 'reconnecting') {
-        offlineQueue.value.push(data)
-
-        // 限制队列大小
-        if (offlineQueue.value.length > 100) {
-          offlineQueue.value.shift()
-        }
-      } else {
-        console.error('[WebSocket] 消息发送失败，且未加入队列')
-      }
+      console.warn('[WebSocket] 消息发送失败：连接未建立', data?.type)
     }
   }
 
@@ -291,16 +265,13 @@ export function useWebSocket() {
       shouldReconnect.value = false
     }
 
-    // 清除重连定时器
     if (reconnectTimer.value) {
       clearTimeout(reconnectTimer.value)
       reconnectTimer.value = null
     }
 
-    // 停止心跳
     stopHeartbeat()
 
-    // 关闭连接
     if (ws.value) {
       ws.value.close(1000, 'Client disconnect')
       ws.value = null
@@ -308,7 +279,6 @@ export function useWebSocket() {
 
     isConnected.value = false
     connectionState.value = 'disconnected'
-    offlineQueue.value = []
   }
 
   /**
@@ -331,19 +301,14 @@ export function useWebSocket() {
   })
 
   return {
-    // 基础方法
     connect,
     send,
     disconnect,
     reconnect,
     setLongTaskStatus,
-
-    // 状态
     isConnected,
     connectionState,
     reconnectAttempts,
-    shouldReconnect,
-    offlineQueueSize: () => offlineQueue.value.length,
-    clearOfflineQueue: () => { offlineQueue.value = [] }
+    shouldReconnect
   }
 }

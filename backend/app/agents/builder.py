@@ -65,14 +65,9 @@ def build_graph(
     )
 
     # ==================== 构建 create_agent 子图 ====================
-    calphad_submit_names = [
-        t.name for t in calphad_tools if "submit" in t.name
-    ] if calphad_tools else []
-    hitl_config = {name: True for name in calphad_submit_names} if calphad_submit_names else {
-        "calphamesh_submit_scheil_task": True,
-        "calphamesh_submit_point_task": True,
-        "calphamesh_submit_line_task": True,
-    }
+    # calphad_submit_names 用于动态生成 HITL 配置（若 calphad_tools 可用）
+    calphad_submit_names = [t.name for t in calphad_tools if "submit" in t.name] if calphad_tools else []
+    hitl_config = {name: True for name in calphad_submit_names} if calphad_submit_names else None
 
     dataExpert_agent, analysisExpert_agent, reportWriter_agent = build_expert_agents(
         data_expert_tools=data_expert_tools,

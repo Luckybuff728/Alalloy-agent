@@ -1,0 +1,328 @@
+/**
+ * 响应式布局样式
+ * 
+ * 断点系统：
+ * - 超大屏 (xl): >= 1400px - 完整三栏布局
+ * - 大屏 (lg): 1200px - 1399px - 三栏布局，缩小边距
+ * - 中屏 (md): 992px - 1199px - 三栏布局，进一步压缩
+ * - 平板 (sm): 768px - 991px - 上-中-下垂直布局
+ * - 手机 (xs): < 768px - 单栏布局 + 抽屉式菜单
+ * - 超小屏: < 480px - 进一步压缩
+ */
+
+/* ========== 全局响应式变量 ========== */
+
+/* 大屏幕适配 (1200px - 1399px) */
+@media (max-width: 1399px) {
+  :root {
+    --font-xs: 11px;
+    --font-sm: 12px;
+    --font-base: 13px;
+    --font-md: 14px;
+    --font-lg: 15px;
+    --font-xl: 17px;
+    --font-2xl: 19px;
+    --font-3xl: 22px;
+    --font-4xl: 26px;
+    
+    --spacing-md: 14px;
+    --spacing-lg: 20px;
+    --spacing-xl: 28px;
+  }
+  
+  h1 { font-size: 20px; }
+  h2 { font-size: 18px; }
+  h3 { font-size: 16px; }
+  h4 { font-size: 15px; }
+}
+
+/* 中等屏幕适配 (992px - 1199px) */
+@media (max-width: 1199px) {
+  :root {
+    --font-xs: 11px;
+    --font-sm: 12px;
+    --font-base: 13px;
+    --font-md: 14px;
+    --font-lg: 15px;
+    --font-xl: 16px;
+    --font-2xl: 18px;
+    --font-3xl: 20px;
+    --font-4xl: 24px;
+    
+    --spacing-md: 12px;
+    --spacing-lg: 18px;
+    --spacing-xl: 24px;
+    
+    --radius-lg: 10px;
+    --radius-xl: 14px;
+  }
+  
+  h1 { font-size: 18px; }
+  h2 { font-size: 16px; }
+  h3 { font-size: 15px; }
+  h4 { font-size: 14px; }
+  
+  .markdown-content {
+    font-size: 13px;
+  }
+  
+  .markdown-content h1 { font-size: 18px; }
+  .markdown-content h2 { font-size: 16px; }
+  .markdown-content h3 { font-size: 14px; }
+  .markdown-content h4 { font-size: 13px; }
+  .markdown-content p { font-size: 13px; }
+}
+
+/* 平板适配 (768px - 991px) */
+@media (max-width: 991px) {
+  :root {
+    --font-xs: 10px;
+    --font-sm: 11px;
+    --font-base: 12px;
+    --font-md: 13px;
+    --font-lg: 14px;
+    --font-xl: 15px;
+    --font-2xl: 17px;
+    --font-3xl: 19px;
+    --font-4xl: 22px;
+    
+    --spacing-sm: 6px;
+    --spacing-md: 10px;
+    --spacing-lg: 16px;
+    --spacing-xl: 20px;
+    
+    --radius-md: 6px;
+    --radius-lg: 8px;
+    --radius-xl: 12px;
+  }
+  
+  body {
+    font-size: 12px;
+  }
+  
+  h1 { font-size: 17px; }
+  h2 { font-size: 15px; }
+  h3 { font-size: 14px; }
+  h4 { font-size: 13px; }
+  
+  .markdown-content {
+    font-size: 12px;
+    line-height: 1.75;
+  }
+  
+  .markdown-content h1 { font-size: 16px; margin-top: 20px; margin-bottom: 12px; }
+  .markdown-content h2 { font-size: 15px; }
+  .markdown-content h3 { font-size: 13px; }
+  .markdown-content p { font-size: 12px; margin: 10px 0; }
+  .markdown-content ul,
+  .markdown-content ol { padding-left: 20px; margin: 10px 0; }
+  .markdown-content li { margin: 6px 0; }
+  .markdown-content pre { padding: 12px; }
+  .markdown-content code { font-size: 11px; padding: 2px 6px; }
+  .markdown-content th,
+  .markdown-content td { padding: 8px 10px; }
+}
+
+/* 手机适配 (< 768px) */
+@media (max-width: 767px) {
+  :root {
+    --font-xs: 10px;
+    --font-sm: 11px;
+    --font-base: 12px;
+    --font-md: 13px;
+    --font-lg: 14px;
+    --font-xl: 15px;
+    --font-2xl: 16px;
+    --font-3xl: 18px;
+    --font-4xl: 20px;
+    
+    --spacing-xs: 3px;
+    --spacing-sm: 6px;
+    --spacing-md: 8px;
+    --spacing-lg: 12px;
+    --spacing-xl: 16px;
+    --spacing-2xl: 24px;
+    
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 8px;
+    --radius-xl: 10px;
+  }
+  
+  body {
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  
+  h1 { font-size: 16px; }
+  h2 { font-size: 15px; }
+  h3 { font-size: 14px; }
+  h4 { font-size: 13px; }
+  
+  /* 滚动条在移动端更细 */
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  
+  .markdown-content {
+    font-size: 12px;
+    line-height: 1.7;
+  }
+  
+  .markdown-content h1 { font-size: 15px; margin-top: 16px; margin-bottom: 10px; }
+  .markdown-content h2 { font-size: 14px; }
+  .markdown-content h3 { font-size: 13px; }
+  .markdown-content p { font-size: 12px; margin: 8px 0; }
+  .markdown-content ul,
+  .markdown-content ol { padding-left: 16px; margin: 8px 0; }
+  .markdown-content li { margin: 4px 0; line-height: 1.6; }
+  .markdown-content pre { padding: 10px; margin: 12px 0; border-radius: 6px; }
+  .markdown-content code { font-size: 10px; padding: 2px 4px; }
+  .markdown-content th,
+  .markdown-content td { padding: 6px 8px; font-size: 11px; }
+  .markdown-content blockquote { padding-left: 12px; margin: 12px 0; }
+}
+
+/* 超小屏手机适配 (< 480px) */
+@media (max-width: 479px) {
+  :root {
+    --font-xs: 9px;
+    --font-sm: 10px;
+    --font-base: 11px;
+    --font-md: 12px;
+    --font-lg: 13px;
+    --font-xl: 14px;
+    --font-2xl: 15px;
+    --font-3xl: 16px;
+    --font-4xl: 18px;
+    
+    --spacing-md: 6px;
+    --spacing-lg: 10px;
+    --spacing-xl: 14px;
+  }
+  
+  body {
+    font-size: 11px;
+  }
+  
+  h1 { font-size: 15px; }
+  h2 { font-size: 14px; }
+  h3 { font-size: 13px; }
+  h4 { font-size: 12px; }
+}
+
+/* ========== 响应式工具类 ========== */
+
+/* 在特定断点隐藏元素 */
+.hide-xs { display: block; }
+.hide-sm { display: block; }
+.hide-md { display: block; }
+.hide-lg { display: block; }
+
+@media (max-width: 479px) {
+  .hide-xs { display: none !important; }
+}
+
+@media (max-width: 767px) {
+  .hide-sm { display: none !important; }
+}
+
+@media (max-width: 991px) {
+  .hide-md { display: none !important; }
+}
+
+@media (max-width: 1199px) {
+  .hide-lg { display: none !important; }
+}
+
+/* 仅在特定断点显示 */
+.show-xs-only { display: none; }
+.show-sm-only { display: none; }
+.show-md-only { display: none; }
+
+@media (max-width: 479px) {
+  .show-xs-only { display: block !important; }
+}
+
+@media (min-width: 480px) and (max-width: 767px) {
+  .show-sm-only { display: block !important; }
+}
+
+@media (min-width: 768px) and (max-width: 991px) {
+  .show-md-only { display: block !important; }
+}
+
+/* ========== Element Plus 响应式覆盖 ========== */
+
+@media (max-width: 991px) {
+  .el-button {
+    font-size: 12px;
+  }
+  
+  .el-input__inner {
+    font-size: 12px;
+  }
+  
+  .el-form-item__label {
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 767px) {
+  .el-button {
+    font-size: 12px;
+    padding: 8px 12px;
+  }
+  
+  .el-button--large {
+    padding: 10px 16px;
+  }
+  
+  .el-input__inner {
+    font-size: 12px;
+  }
+  
+  .el-form-item {
+    margin-bottom: 12px;
+  }
+  
+  .el-form-item__label {
+    font-size: 11px;
+    padding-bottom: 2px;
+  }
+  
+  .el-collapse-item__header {
+    font-size: 12px;
+    height: 36px;
+  }
+  
+  .el-collapse-item__content {
+    padding: 10px;
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 479px) {
+  .el-button {
+    font-size: 11px;
+    padding: 6px 10px;
+  }
+  
+  .el-button--large {
+    padding: 8px 14px;
+  }
+  
+  .el-input__inner {
+    font-size: 11px;
+  }
+  
+  .el-form-item__label {
+    font-size: 10px;
+  }
+  
+  .el-collapse-item__header {
+    font-size: 11px;
+    height: 32px;
+  }
+}

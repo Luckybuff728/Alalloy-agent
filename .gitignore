@@ -1,5 +1,5 @@
 # 环境变量（敏感信息）
-.env
+# .env
 
 # Python 缓存
 __pycache__/
@@ -30,10 +30,14 @@ logs/
 # Node.js 依赖
 node_modules/
 web/node_modules/
+frontend/node_modules/
 
 # 前端构建产物
 web/dist/
 web/build/
+frontend/.nuxt/
+frontend/.output/
+frontend/dist/
 
 # 参考资料（不需要推送）
 langchain_reference/
@@ -48,3 +52,11 @@ UI_DESIGN_GUIDE.md
 activate-agent.ps1
 Al合金(Ver.2.3.0)-IDME.yml
 Linkx.py
+
+# 临时文件和报告
+backend/reports/
+1.md
+SESSION_RESTORE_ANALYSIS.md
+SESSION_RESTORE_FIX.md
+TOOL_ERROR_HANDLING.md
+WIDGET_RESTORE_DESIGN.md

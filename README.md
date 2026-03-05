@@ -1,83 +1,146 @@
-# IDME 工作流重构项目 (IDME Workflow Refactoring)
+# Alalloy Agent v2.0 - 铝合金智能设计系统
 
-本项目使用 LangGraph 和 React 重构了原有的 IDME 合金设计工作流，实现了基于 WebSocket 的流式交互和并行分析。
+基于 **LangChain 1.x + LangGraph 1.x** 官方最佳实践重构的铝合金智能设计系统。
+采用 **Supervisor Loop** 架构，集成 IDME 知识图谱、ONNX 性能预测和 Calphad 热力学计算。
 
-## 目录结构
+## 核心特性
+
+- **Supervisor Loop 架构** — Thinker 路由 + 多专家协作（data_expert / analyst / report_writer）
+- **structured_output 路由** — Pydantic Model 替代正则解析，类型安全
+- **AgentMiddleware 体系** — GenericContextMiddleware + GenericHITLMiddleware
+- **HITL 人机协同** — interrupt() + Command(resume) 官方机制
+- **ReAct 循环显示** — 通过 tool_calls 区分推理步骤和最终回复
+- **MCP 工具集成** — ONNX 性能预测 + Calphad 热力学计算
+- **MessagesState 最小化** — 只存控制字段，业务数据留在 ToolMessage 中
+
+## 项目结构
 
 ```
-d:/Agent/Al_IDME/
-├── backend/               # 后端代码 (Python/FastAPI/LangGraph)
-│   ├── app/               # 核心逻辑
-│   │   ├── agent.py       # 图构建
-│   │   ├── nodes.py       # 节点函数
-│   │   ├── state.py       # 状态定义
-│   │   └── tools.py       # 工具与 MCP 集成
-│   ├── server.py          # FastAPI 服务器入口
-│   └── requirements.txt   # 后端依赖
-└── web/                   # 前端代码 (React/Vite/Tailwind)
-    ├── src/
-    │   ├── App.tsx        # 主应用组件
-    │   └── index.css      # 全局样式
-    └── ...
+Alalloy_agent/
+├── backend/
+│   └── app/
+│       ├── core/              # 核心配置（LLM, 日志）
+│       │   ├── llm.py         # DashScope 通义千问配置
+│       │   └── logger.py      # Loguru 日志
+│       ├── agents/            # Agent 层（严格按官方文档）
+│       │   ├── state.py       # AlalloyState（MessagesState 最小化）
+│       │   ├── nodes.py       # Thinker + Expert 节点
+│       │   ├── middleware.py   # GenericContext + GenericHITL 中间件
+│       │   ├── context.py     # 上下文构建器
+│       │   ├── hitl.py        # HITL payload 构建器
+│       │   └── prompts/       # Markdown 提示词模板
+│       ├── graph/             # 图构建层
+│       │   └── builder.py     # StateGraph Supervisor Loop
+│       ├── infra/             # 基础设施层
+│       │   ├── idme_service.py  # 华为云 IDME API
+│       │   └── mcp_service.py   # MCP 客户端（ONNX + Calphad）
+│       ├── tools/             # @tool 定义（纯业务逻辑）
+│       │   ├── idme_tool.py   # IDME 数据查询
+│       │   ├── onnx_tool.py   # ONNX 性能预测
+│       │   ├── calphad_tool.py  # Calphad 计算
+│       │   └── composition_tool.py  # 成分解析
+│       ├── api/               # API 层
+│       │   ├── rest.py        # REST API（会话管理）
+│       │   └── websocket/     # WebSocket 通信
+│       │       ├── manager.py # ConnectionManager
+│       │       ├── stream.py  # StreamHandler（stream_mode）
+│       │       └── routes.py  # WS 路由（chat + resume）
+│       ├── utils/             # 工具函数
+│       │   └── composition.py # 成分解析/转换
+│       └── main.py            # FastAPI 入口
+├── web/                       # Nuxt 前端（Phase 2）
+├── run.py                     # 启动脚本
+├── requirements.txt           # Python 依赖
+└── .env.example               # 环境变量模板
 ```
 
-## 运行指南
+## 系统架构
 
-### 1. 启动后端服务
+### Supervisor Loop 拓扑
 
-确保已安装 Python 3.9+。
+```
+START → Thinker ──┬──→ data_expert ──→ ToolNode ──→ data_expert ──→ Thinker
+                  │                                                    │
+                  ├──→ analyst ──→ ToolNode ──→ analyst ──→ Thinker   │
+                  │                                                    │
+                  ├──→ report_writer ──→ Thinker                      │
+                  │                                                    │
+                  └──→ END ◄──────────────────────────────────────────┘
+```
+
+### WebSocket 通信协议
+
+```
+Frontend (Nuxt)              Backend (FastAPI + LangGraph)
+     │                                    │
+     │──── {type:"chat", message:"..."}──►│
+     │                                    │
+     │◄─── {type:"agent_update"}─────────│  Thinker 决策
+     │◄─── {type:"react_step"}───────────│  Expert 推理（含 tool_calls）
+     │◄─── {type:"tool_result"}──────────│  工具执行结果
+     │◄─── {type:"token"}───────────────│  最终回复
+     │◄─── {type:"interrupt"}────────────│  HITL 确认请求
+     │                                    │
+     │──── {type:"resume", ...}─────────►│  用户确认/取消
+     │                                    │
+     │◄─── {type:"chat_complete"}────────│  对话完成
+```
+
+---
+
+## 快速开始
+
+### 环境要求
+
+- **Python**: 3.10+
+- **Conda**: agent 环境
+
+### 1. 配置环境变量
 
 ```bash
-# 安装依赖
-pip install -r requirements.txt
+cp .env.example .env
+# 编辑 .env 文件，填入真实的 API 密钥
+```
 
-# 从根目录启动后端服务
+### 2. 安装依赖 + 启动
+
+```bash
+conda activate agent
+pip install -r requirements.txt
 python run.py
 ```
 
-服务器将在 `http://0.0.0.0:8001` 启动，WebSocket 端点为 `ws://localhost:8001/ws/run`。
+- 后端 API: `http://localhost:8001`
+- API 文档: `http://localhost:8001/docs`
+- WebSocket: `ws://localhost:8001/ws/chat/{session_id}`
 
-### 2. 启动前端应用
+## 官方文档对照
 
-确保已安装 Node.js 16+。
+每个模块都有明确的官方文档依据：
 
-```bash
-cd web
-# 安装依赖 (如果尚未安装)
-npm install
+| 模块 | 官方文档 | 说明 |
+|------|---------|------|
+| Agent 创建 | `langchain/agents.mdx` | create_agent + middleware |
+| Middleware | `langchain/middleware/custom.mdx` | wrap_model_call / wrap_tool_call |
+| HITL | `langchain/human-in-the-loop.mdx` | interrupt() + Command(resume) |
+| structured_output | `langchain/structured-output.mdx` | Pydantic 路由 |
+| State | `langgraph/use-graph-api.mdx` | MessagesState 最小化 |
+| 流式 | `langgraph/streaming.mdx` | stream_mode=["updates"] |
+| Interrupts | `langgraph/interrupts.mdx` | HITL interrupt 检测 |
+| 编排 | `langgraph/multi-agent/router.mdx` | Supervisor Loop |
 
-# 启动开发服务器
-npm run dev
-```
+## 技术栈
 
-前端应用将在 `http://localhost:5174` 启动。
+| 技术 | 用途 |
+|------|------|
+| **LangChain 1.x** | Agent + Middleware + Tools |
+| **LangGraph 1.x** | StateGraph + Checkpointer + Interrupts |
+| **FastAPI** | Web 框架 + WebSocket |
+| **DashScope** | 通义千问 LLM（qwen-plus） |
+| **MCP** | ONNX + Calphad 工具服务 |
+| **Supabase** | 会话持久化（后续启用） |
+| **Nuxt 4** | 前端（后续启用） |
 
-### 3. 配置说明
+## 许可证
 
-后端配置位于根目录 `.env`，主要配置项：
-
-| 配置项 | 默认值 | 说明 |
-|--------|--------|------|
-| BACKEND_PORT | 8001 | 后端服务端口 |
-| BACKEND_HOST | 0.0.0.0 | 后端服务地址 |
-| FRONTEND_PORT | 5174 | 前端服务端口 |
-| FRONTEND_URL | http://localhost:5174 | 前端地址 (用于 CORS) |
-
-前端配置位于 `web/.env`：
-
-| 配置项 | 默认值 | 说明 |
-|--------|--------|------|
-| VITE_WS_URL | ws://localhost:8001/ws/run | WebSocket 地址 |
-| VITE_API_URL | http://localhost:8001 | 后端 API 地址 |
-
-## 功能说明
-
--   **智能对话**：通过左侧聊天面板输入需求（如“推荐 Al-Si 合金”）。
--   **实时状态**：左侧面板显示当前工作流运行到的节点（参数提取 -> IDME 查询 -> 推荐 -> 分析 -> 报告）。
--   **结果展示**：右侧面板实时展示推荐的合金列表、并行分析的结果（ONNX 预测）以及最终报告。
--   **并行分析**：后端使用 LangGraph 子图并行处理多个合金的性能预测和热力学计算。
-
-## 注意事项
-
--   **MCP 服务器**：请确保 ONNX 和 Calphad 的 MCP 服务器已在 `http://8.148.79.228:9010` 和 `9009` 上运行并可访问。
--   **API 凭据**：IDME 和华为云 IAM 的凭据目前配置在 `tools.py` 中，生产环境建议通过环境变量注入。
+内部项目，仅供授权使用。

@@ -1,9 +1,5 @@
 """
-API 路由模块
+API 层
 
-包含 WebSocket 和 REST API 路由定义。
+包含 WebSocket 通信、REST API、认证和依赖注入。
 """
-
-from .websocket import router as websocket_router
-
-__all__ = ["websocket_router"]

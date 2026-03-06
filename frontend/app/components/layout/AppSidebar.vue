@@ -160,11 +160,18 @@ const authStore = useAuthStore()
 const router = useRouter()
 
 const handleLogout = () => {
+  // ★ logout() 内部已将 clearTokens() 提前执行（乐观状态更新）
+  // isAuthenticated 立刻变 false，app.vue watcher 会自动触发 /login 路由跳转
+  // 因此无需手动 router.push('/login')，由 app.vue 统一管理路由守卫
   authStore.logout()
-  router.push('/login')
 }
 
-const userName = computed(() => authStore.user?.display_name || authStore.user?.username || 'User')
+// /api/auth/me 返回 { id, email, username, name, role }
+// Supabase 用户: name=full_name, username=email
+// FerrisKey 用户: name=姓名, username=preferred_username
+const userName = computed(() =>
+  authStore.user?.name || authStore.user?.username || authStore.user?.email || 'User'
+)
 const userId = computed(() => authStore.user?.id)
 const userInitial = computed(() => (userName.value || 'U')[0].toUpperCase())
 
@@ -193,14 +200,8 @@ const groupedSessions = computed(() => {
 })
 
 
-onMounted(() => {
-  // 如果已认证，立即获取会话
-  if (authStore.isAuthenticated) {
-    fetchSessions()
-  }
-})
-
-// 监听认证状态变化，认证完成后自动获取会话列表
+// ★ 使用 watch(immediate:true) 统一处理：既覆盖初始加载，也响应登录状态变化
+// 不需要额外的 onMounted，避免双重 fetchSessions()
 watch(() => authStore.isAuthenticated, (isAuth) => {
   if (isAuth) {
     console.log('[AppSidebar] 认证完成，加载会话列表')

@@ -202,89 +202,179 @@ export const processToolResult = ({ data, state, callbacks }) => {
     resultsStore.updateState('performance', result)
     addResult('performance', display_name || 'ML 性能预测', result)
   } 
-  // 6. Calphad 热力学计算（铝合金）
-  // 支持旧工具名称和 MCP 原生工具名称
-  else if (tool.includes('submit_calphad_task') || tool.startsWith('calphamesh_submit_')) {
+  // 6. Calphad / CalphaMesh 热力学计算
+  else if (
+    tool.includes('submit_calphad_task') ||
+    tool.startsWith('calphamesh_submit_') ||
+    tool === 'calphamesh_get_task_result' ||
+    tool === 'calphamesh_get_task_status' ||
+    tool === 'calphamesh_list_tasks'
+  ) {
     if (result && result.status === 'cancelled') {
       console.log('[ToolHandler] Calphad 计算已取消，跳过结果展示')
       return
     }
     
     console.log('[ToolHandler] Calphad 原始结果:', result)
-    
-    // 从工具名称推断计算类型
-    const inferredCalcType = tool.includes('scheil') ? 'scheil' 
-      : tool.includes('line') ? 'line' 
-      : tool.includes('point') ? 'point' 
-      : 'scheil'
-    
-    // MCP Calphad 工具返回纯文本格式："Point计算任务已提交..."、"Scheil计算任务已提交..."、"任务列表 (第1页/共21页)"
-    // 这种情况下，结果只是任务提交确认，实际数据需要通过 get_task_result 获取
-    if (typeof result === 'string') {
-      // 检查是否是 MCP 任务提交确认消息或任务列表
-      if (result.includes('计算任务已') || result.includes('task_id') || result.includes('已提交')) {
-        console.log('[ToolHandler] 检测到 MCP Calphad 任务提交确认，跳过图表展示')
-        // 任务提交确认不需要展示图表，等待 get_task_result 返回实际数据
-        return
-      }
-      
-      // calphamesh_list_tasks 返回的任务列表（纯文本格式）
-      if (result.includes('任务列表') && (result.includes('completed') || result.includes('pending') || result.includes('failed'))) {
-        console.log('[ToolHandler] 检测到 MCP Calphad 任务列表，作为内联文本展示')
-        // 任务列表直接作为内联文本展示在聊天中，不需要单独的结果面板
-        return
-      }
-      
-      // 尝试 JSON 解析
+
+    const parseMaybeJson = (value) => {
+      if (typeof value !== 'string') return value
       try {
-        const parsedResult = JSON.parse(result)
-        if (parsedResult.status === 'success' && parsedResult.result) {
-          const resultData = parsedResult.result
-          const calcType = parsedResult.calculation_type || inferredCalcType
-          
-          if (calcType === 'scheil') {
-            const scheilData = {
-              composition: parsedResult.composition,
-              data: resultData.scheil_data || resultData,
-              title: `${parsedResult.composition} Scheil 凝固曲线`
-            }
-            addResult('scheil', display_name || 'Scheil 凝固曲线', scheilData)
-            console.log('[ToolHandler] Scheil 凝固曲线结果已添加')
-          } else if (calcType === 'line') {
-            const phaseFractionData = {
-              data: resultData.phase_fraction_data || resultData,
-              phases: resultData.phases || Object.keys(resultData[0] || {}).filter(k => k !== 'temperature'),
-              title: `${parsedResult.composition} 相分数-温度曲线`
-            }
-            addResult('phase_fraction', display_name || '相分数曲线', phaseFractionData)
-            console.log('[ToolHandler] 相分数曲线结果已添加')
-          } else if (calcType === 'point') {
-            addResult('thermo_point', display_name || '热力学点计算', resultData)
-            console.log('[ToolHandler] 热力学点计算结果已添加')
-          }
-        }
-      } catch (e) {
-        console.warn('[ToolHandler] Calphad 结果非 JSON 格式，可能是状态消息:', result.substring(0, 100))
+        return JSON.parse(value)
+      } catch {
+        return value
       }
-    } else if (typeof result === 'object' && result.status === 'success' && result.result) {
-      // 已经是对象格式
-      const resultData = result.result
-      const calcType = result.calculation_type || inferredCalcType
-      
-      if (calcType === 'scheil') {
-        const scheilData = {
-          composition: result.composition,
-          data: resultData.scheil_data || resultData,
-          title: `${result.composition} Scheil 凝固曲线`
+    }
+
+    const buildScheilSeries = (payload) => {
+      const rawCurve = payload?.result?.raw_data
+      if (rawCurve?.temperatures && rawCurve?.liquid_fractions) {
+        return rawCurve.temperatures
+          .map((temperature, idx) => {
+            const liquid = Number(rawCurve.liquid_fractions[idx] ?? 0)
+            return {
+              temperature: Number(temperature),
+              liquid,
+              solid: Number(rawCurve.solid_fractions?.[idx] ?? (1 - liquid))
+            }
+          })
+          .filter(item => !Number.isNaN(item.temperature))
+      }
+
+      const keyPoints = payload?.result?.data_summary?.key_points || []
+      return keyPoints
+        .map(point => ({
+          temperature: Number(point.temperature_K ?? point.temperature ?? 0),
+          liquid: Number(point.liquid_fraction ?? 0),
+          solid: Number(point.solid_fraction ?? (1 - Number(point.liquid_fraction ?? 0)))
+        }))
+        .filter(item => !Number.isNaN(item.temperature))
+    }
+
+    const buildLineSeries = (payload) => {
+      const rows = payload?.result?.raw_data || payload?.result?.data_summary?.rows || []
+      const phases = new Set()
+
+      const data = rows
+        .map(row => {
+          if (!row || typeof row !== 'object') return null
+
+          const temperature = Number(
+            row['T/K'] ??
+            row.temperature ??
+            row.temperature_K ??
+            row['temperature_K'] ??
+            row['Temperature'] ??
+            NaN
+          )
+
+          if (Number.isNaN(temperature)) return null
+
+          const normalized = { temperature }
+          Object.entries(row).forEach(([key, value]) => {
+            const match = key.match(/^f\((.+)\)$/)
+            if (!match) return
+            const phase = match[1]
+            const numericValue = Number(value)
+            if (!Number.isNaN(numericValue)) {
+              normalized[phase] = numericValue
+              phases.add(phase)
+            }
+          })
+          return normalized
+        })
+        .filter(Boolean)
+
+      return { data, phases: Array.from(phases) }
+    }
+
+    const parsedResult = parseMaybeJson(result)
+
+    // 新工作流：submit/status/list 只作为过程信息，不进入结果面板
+    if (tool.startsWith('calphamesh_submit_')) {
+      console.log('[ToolHandler] CalphaMesh 任务已提交，等待 get_task_result 返回实际数据')
+      return
+    }
+
+    if (tool === 'calphamesh_get_task_status' || tool === 'calphamesh_list_tasks') {
+      console.log('[ToolHandler] CalphaMesh 状态/列表结果仅作过程信息展示，不加入结果面板')
+      return
+    }
+
+    if (tool === 'calphamesh_get_task_result') {
+      if (!parsedResult || typeof parsedResult !== 'object') {
+        console.warn('[ToolHandler] CalphaMesh 结果无法解析为对象，跳过结果面板展示')
+        return
+      }
+
+      if (['pending', 'running', 'still_running'].includes(parsedResult.status)) {
+        console.log('[ToolHandler] CalphaMesh 任务仍在运行，跳过结果面板展示')
+        return
+      }
+
+      if (parsedResult.task_type === 'scheil_solidification') {
+        const scheilSeries = buildScheilSeries(parsedResult)
+        if (scheilSeries.length > 0) {
+          addResult('scheil', display_name || 'Scheil 凝固曲线', {
+            data: scheilSeries,
+            raw: parsedResult,
+            title: 'Scheil 凝固曲线'
+          })
+        } else {
+          addResult('thermo_scheil', display_name || 'Scheil 凝固分析', parsedResult)
         }
-        addResult('scheil', display_name || 'Scheil 凝固曲线', scheilData)
+        return
+      }
+
+      if (parsedResult.task_type === 'line_calculation') {
+        const { data: phaseData, phases } = buildLineSeries(parsedResult)
+        if (phaseData.length > 0 && phases.length > 0) {
+          addResult('phase_fraction', display_name || '相分数曲线', {
+            data: phaseData,
+            phases,
+            raw: parsedResult,
+            title: '相分数-温度曲线'
+          })
+        } else {
+          addResult('thermo_line', display_name || '线计算结果', parsedResult)
+        }
+        return
+      }
+
+      if (parsedResult.task_type === 'point_calculation') {
+        addResult('thermo_point', display_name || '热力学点计算', parsedResult)
+        return
+      }
+
+      addResult('thermo_point', display_name || '热力学结果', parsedResult)
+      return
+    }
+
+    // 兼容旧本地 Calphad 工具输出
+    const inferredCalcType = tool.includes('scheil')
+      ? 'scheil'
+      : tool.includes('line')
+        ? 'line'
+        : tool.includes('point')
+          ? 'point'
+          : 'scheil'
+
+    if (typeof parsedResult === 'object' && parsedResult?.status === 'success' && parsedResult?.result) {
+      const resultData = parsedResult.result
+      const calcType = parsedResult.calculation_type || inferredCalcType
+
+      if (calcType === 'scheil') {
+        addResult('scheil', display_name || 'Scheil 凝固曲线', {
+          composition: parsedResult.composition,
+          data: resultData.scheil_data || resultData,
+          title: `${parsedResult.composition} Scheil 凝固曲线`
+        })
       } else if (calcType === 'line') {
-        const phaseFractionData = {
+        addResult('phase_fraction', display_name || '相分数曲线', {
           data: resultData.phase_fraction_data || resultData,
           phases: resultData.phases || Object.keys(resultData[0] || {}).filter(k => k !== 'temperature'),
-          title: `${result.composition} 相分数-温度曲线`
-        }
-        addResult('phase_fraction', display_name || '相分数曲线', phaseFractionData)
+          title: `${parsedResult.composition} 相分数曲线`
+        })
       } else if (calcType === 'point') {
         addResult('thermo_point', display_name || '热力学点计算', resultData)
       }

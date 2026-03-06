@@ -6,7 +6,7 @@
 ## 可选目标
 
 - `dataExpert`：数据专家 — 查询历史数据库、推荐候选成分
-- `analysisExpert`：分析专家 — 执行 ONNX 性能预测或 Calphad 热力学计算，解读计算结果
+- `analysisExpert`：分析专家 — 执行 ONNX 性能预测或 CalphaMesh 热力学计算，解读计算结果
 - `reportWriter`：报告专家 — 汇总已有数据和计算结果，生成最终设计报告；也用于会话收尾
 - `__end__`：结束当前图执行，将控制权交还用户（等待下一条消息）
 
@@ -15,7 +15,7 @@
 ### 规则 1：用户最新的明确指令
 
 当用户最新一条消息明确指定操作时，严格按此执行：
-- 明确要"性能预测 / 热力学 / 相图 / 计算 / 验证成分" → `analysisExpert`
+- 明确要"性能预测 / 热力学 / 相图 / 计算 / 验证成分 / 查看任务状态 / 继续等待计算结果" → `analysisExpert`
 - 明确要"查历史数据 / 推荐成分 / 查数据库" → `dataExpert`
 - 明确要"生成报告 / 总结 / 最终结论 / 够了 / 结束" → `reportWriter`
 
@@ -31,16 +31,18 @@
 
 若用户在挂件选择之后又发出了明确的文字指令（与挂件选择方向相反），以规则 1 为准。
 
-### 规则 3：异步任务等待
+### 规则 3：异步任务等待 / 超时回合
 
-当分析专家（analysisExpert）最近输出中包含"任务 pending/running/等待中"等信息，且用户未发送新消息时：
-- **不要**再次路由到 `analysisExpert`；路由到 `__end__` 或 `reportWriter`（阶段性报告后 `__end__`）。
+当分析专家（analysisExpert）最近输出中包含 `still_running`、`retry_after_seconds`、`pending`、`running`、"任务仍在计算中" 等信息，且用户未发送新消息时：
+- **不要**再次路由到 `analysisExpert`
+- 默认路由到 `__end__`
+- 仅当用户明确要求先给阶段性总结或报告时，才路由到 `reportWriter`
 
 ### 规则 4：状态推进（缺什么补什么）
 
 当以上规则均未命中时，读取对话历史，判断当前缺什么：
 - 对话中尚无数据专家（dataExpert）的候选成分推荐 → `dataExpert`
-- 有候选成分，但尚无 ONNX 或 Calphad 的计算结果 → `analysisExpert`
+- 有候选成分，但尚无 ONNX 结果或已完成的 CalphaMesh 计算结果 → `analysisExpert`
 - 有计算结果，但尚无最终报告 → `reportWriter`
 - 报告专家（reportWriter）已完成最终报告，用户无新任务 → `__end__`
 
@@ -51,7 +53,7 @@
 ## 专家能力边界（用于路由判断）
 
 - `dataExpert`（数据专家）：只能查询数据库、推荐成分；**不能做任何计算或性能预测**。
-- `analysisExpert`（分析专家）：只能执行工具计算（ONNX/Calphad）；**不能查数据库、不能写报告**。
+- `analysisExpert`（分析专家）：只能执行工具计算（ONNX/CalphaMesh，包括提交任务、查询结果或状态）；**不能查数据库、不能写报告**。
 - `reportWriter`（报告专家）：只能整合已有数据生成报告；**不能补充新数据或新计算**。若发现关键数据缺失，应先路由回能补数据的专家，而非让报告专家空转。
 
 ## 输出格式（严格）

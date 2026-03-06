@@ -62,8 +62,9 @@ onMounted(async () => {
       return
     }
 
-    // 存储 Token
-    authStore.setAuth(accessToken, refreshToken)
+    // 根据 refresh_token 特征判断来源：DEV_MODE 签发的固定为 "dev-refresh-token"
+    const source = (refreshToken === 'dev-refresh-token') ? 'dev_mode' : 'ferriskey'
+    authStore.setAuth(accessToken, refreshToken, null, source)
     message.value = '登录成功，正在获取用户信息...'
 
     // 获取用户信息

@@ -93,23 +93,20 @@ const TOOL_REGISTRY = {
   'calphamesh_submit_scheil_task': {
     displayName: 'Scheil 凝固计算',
     category: ToolCategory.THERMO,
-    resultDisplay: ResultDisplay.CHART,
-    chartComponent: 'ScheilSolidificationChart',
-    description: 'Scheil 凝固路径计算（MCP）',
+    resultDisplay: ResultDisplay.NONE,
+    description: '提交 Scheil 凝固计算任务（MCP）',
   },
   'calphamesh_submit_point_task': {
     displayName: '热力学点计算',
     category: ToolCategory.THERMO,
-    resultDisplay: ResultDisplay.CHART,
-    chartComponent: 'ThermoCompareChart',
-    description: '单点平衡相计算（MCP）',
+    resultDisplay: ResultDisplay.NONE,
+    description: '提交单点平衡计算任务（MCP）',
   },
   'calphamesh_submit_line_task': {
     displayName: '相分数曲线计算',
     category: ToolCategory.THERMO,
-    resultDisplay: ResultDisplay.CHART,
-    chartComponent: 'PhaseFractionChart',
-    description: '相分数-温度曲线计算（MCP）',
+    resultDisplay: ResultDisplay.NONE,
+    description: '提交线性扫描热力学任务（MCP）',
   },
   'calphamesh_get_task_status': {
     displayName: 'Calphad 任务状态',
@@ -118,11 +115,11 @@ const TOOL_REGISTRY = {
     description: '查询 Calphad 任务状态',
   },
   'calphamesh_get_task_result': {
-    displayName: 'Calphad 任务结果',
+    displayName: 'CalphaMesh 任务结果',
     category: ToolCategory.THERMO,
     resultDisplay: ResultDisplay.CHART,
     chartComponent: 'ThermoCompareChart',
-    description: '获取 Calphad 计算结果',
+    description: '获取热力学任务的结构化结果',
   },
   'calphamesh_list_tasks': {
     displayName: 'Calphad 任务列表',

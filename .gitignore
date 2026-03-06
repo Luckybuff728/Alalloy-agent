@@ -1,5 +1,5 @@
-# 环境变量（敏感信息）
-# .env
+﻿# 环境变量（敏感信息）
+.env
 
 # Python 缓存
 __pycache__/
@@ -60,3 +60,5 @@ SESSION_RESTORE_ANALYSIS.md
 SESSION_RESTORE_FIX.md
 TOOL_ERROR_HANDLING.md
 WIDGET_RESTORE_DESIGN.md
+frontend/.env
+upload_pubkey.ps1

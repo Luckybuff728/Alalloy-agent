@@ -3,10 +3,12 @@
 
 提供 FastAPI Depends 依赖，用于保护需要认证的端点。
 
-隐藏问题防护：
-1. 取消了未携带 Token 即可通过的逻辑，保证安全
-2. JWT 解析异常处理统一在 security 中处理
-3. 提取标准化的用户信息，兼容现存 rest.py (使用 id, email, role 等)
+支持三种登录来源的用户信息提取：
+- dev_mode:   DEV_MODE 测试 token，payload 字段与 FerrisKey 一致
+- ferriskey:  FerrisKey OIDC token，使用 preferred_username/name
+- supabase:   Supabase Auth token，name 在 user_metadata.full_name 中
+
+输出统一格式：{ id, email, username, name, role, _auth_source }
 """
 
 from typing import Optional, Dict, Any
@@ -21,15 +23,48 @@ security = HTTPBearer(auto_error=False)
 
 def _extract_user_info(payload: dict) -> Dict[str, Any]:
     """
-    从 Token payload 中提取统一的用户信息
+    从 Token payload 中提取统一的用户信息，兼容多登录来源。
+
+    Supabase JWT 示例结构：
+        { "sub": "uuid", "email": "x@y.com", "role": "authenticated",
+          "aud": "authenticated", "iss": "https://xxx.supabase.co/auth/v1",
+          "user_metadata": { "full_name": "张三", "username": "zhangsan" } }
+
+    FerrisKey / DEV_MODE JWT 示例结构：
+        { "sub": "uuid", "email": "x@y.com", "preferred_username": "zhangsan",
+          "name": "张三", "role": "authenticated" }
     """
+    auth_source = payload.get("_auth_source", "unknown")
+
+    if auth_source == "supabase":
+        user_meta = payload.get("user_metadata") or {}
+        name = (
+            user_meta.get("full_name")
+            or user_meta.get("name")
+            or payload.get("name", "")
+        )
+        username = (
+            user_meta.get("username")
+            or user_meta.get("preferred_username")
+            or payload.get("email", "")
+        )
+        return {
+            "id": payload.get("sub"),
+            "email": payload.get("email"),
+            "username": username,
+            "name": name,
+            "role": payload.get("role", "authenticated"),
+            "_auth_source": "supabase",
+        }
+
+    # FerrisKey / DEV_MODE — 字段结构相同
     return {
-        "id": payload.get("sub"),                                   # 统一使用 sub 作为 id
+        "id": payload.get("sub"),
         "email": payload.get("email"),
         "username": payload.get("preferred_username", payload.get("name", "")),
         "name": payload.get("name", ""),
         "role": payload.get("role", "authenticated"),
-        "_auth_source": payload.get("_auth_source", "unknown"),
+        "_auth_source": auth_source,
     }
 
 

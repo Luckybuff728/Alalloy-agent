@@ -56,15 +56,31 @@ async def lifespan(app: FastAPI):
 
     # ★ 生产模式：预热 JWKS 缓存（确保 WebSocket 同步验证可用）
     if not dev_mode:
+        from .core.security import (
+            _get_ferriskey_jwks, _get_supabase_jwks,
+            SUPABASE_AUTH_ENABLED, SUPABASE_URL
+        )
+        # Supabase JWKS（ES256 用户 Token 验签必需）
+        if SUPABASE_AUTH_ENABLED and SUPABASE_URL:
+            try:
+                sb_jwks = await _get_supabase_jwks()
+                if sb_jwks:
+                    keys = sb_jwks.get("keys", [])
+                    logger.info(f"✅ Supabase JWKS 预热成功: {len(keys)} 个公钥")
+                else:
+                    logger.warning("⚠️ Supabase JWKS 预热失败，Supabase 登录将不可用")
+            except Exception as e:
+                logger.warning(f"⚠️ Supabase JWKS 预热异常: {e}")
+
+        # FerrisKey JWKS（RS256，FerrisKey 不可达时仅影响 SSO 登录，不影响 Supabase）
         try:
-            from .core.security import _get_jwks
-            jwks = await _get_jwks()
-            if jwks:
-                logger.info("✅ JWKS 缓存预热成功")
+            fk_jwks = await _get_ferriskey_jwks()
+            if fk_jwks:
+                logger.info("✅ FerrisKey JWKS 预热成功")
             else:
-                logger.warning("⚠️ JWKS 缓存预热失败，WebSocket 认证可能受影响")
+                logger.warning("⚠️ FerrisKey JWKS 预热失败（仅影响 SSO 登录，不影响 Supabase）")
         except Exception as e:
-            logger.warning(f"⚠️ JWKS 缓存预热异常: {e}")
+            logger.warning(f"⚠️ FerrisKey JWKS 预热异常: {e}")
 
     # 1. 初始化 MCP 客户端（mcp.mdx 最佳实践：工具直接传递给 Agent）
     mcp_tools = []

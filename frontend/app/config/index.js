@@ -20,7 +20,10 @@ const getRuntimeConfig = () => {
     public: {
       devMode: false,
       backendHost: 'localhost',
-      backendPort: '8001'
+      backendPort: '8001',
+      authProvider: 'both',
+      supabaseUrl: '',
+      supabaseAnonKey: '',
     }
   }
 }
@@ -42,6 +45,13 @@ const WS_ENDPOINTS = {
 
 // 开发模式
 const DEV_MODE = config.public.devMode || false
+
+// 登录方式控制：'both' | 'supabase' | 'ferriskey'
+const AUTH_PROVIDER = config.public.authProvider || 'both'
+
+// Supabase 配置（供 auth.js 懒初始化时使用）
+const SUPABASE_URL = config.public.supabaseUrl || ''
+const SUPABASE_ANON_KEY = config.public.supabaseAnonKey || ''
 
 // 默认仿真 ID (如有)
 const defaultSimId = ''
@@ -240,6 +250,9 @@ export const CONFIG = {
   WS_BASE_URL,
   WS_ENDPOINTS,
   DEV_MODE,
+  AUTH_PROVIDER,
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY,
   defaultSimId,
   BRAND,
   CAPABILITIES,
@@ -251,4 +264,4 @@ export const CONFIG = {
 }
 
 // 兼容旧的导出方式
-export { API_BASE_URL, WS_BASE_URL, WS_ENDPOINTS, DEV_MODE }
+export { API_BASE_URL, WS_BASE_URL, WS_ENDPOINTS, DEV_MODE, AUTH_PROVIDER, SUPABASE_URL, SUPABASE_ANON_KEY }

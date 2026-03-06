@@ -174,7 +174,15 @@ def _adapt_resume_value(value, chat_text: str = None, pending_interrupts: list =
     if isinstance(value, list):
         return {"decisions": value}
 
-    # 兜底
+    # ── dict 值但 pending_interrupts 未能识别中断类型 ─────────────────────
+    # 前端 guidance_widget 选择结果（如 {'type':'option','id':'...','label':'...'}）
+    # 不含 "decisions" 键，而 HITL 的 resume 始终携带 "decisions" 包装。
+    # 因此对不含 "decisions" 的 dict 直接透传，避免竞态窗口下丢失用户选择。
+    if isinstance(value, dict):
+        logger.info(f"Resume: 未分类中断, dict 值直接透传 ← value={str(value)[:80]}")
+        return value
+
+    # 兜底（非 dict 的极端情况）
     logger.warning(f"Resume: 未识别格式, value={str(value)[:80]}")
     return {"decisions": [{"type": "approve"}]}
 
@@ -244,6 +252,7 @@ def _extract_pending_interrupts(state) -> List[Dict[str, Any]]:
     interrupts = []
 
     if not hasattr(state, "tasks") or not state.tasks:
+        logger.debug("_extract_pending_interrupts: state.tasks 为空")
         return interrupts
 
     for task in state.tasks:
@@ -565,11 +574,8 @@ def _extract_tool_results(messages: List[BaseMessage]) -> List[Dict[str, Any]]:
     result_tools = {
         # MCP: ONNX 性能预测
         "onnx_model_inference": "performance_prediction",
-        # MCP: Calphad 热力学计算
-        "calphamesh_submit_point_task": "calphad_task",
-        "calphamesh_submit_line_task": "calphad_task",
-        "calphamesh_submit_scheil_task": "calphad_task",
-        "calphamesh_get_task_status": "calphad_task",
+        # MCP: Calphad 热力学结果（submit/status/list 不应进入结果面板）
+        "calphamesh_get_task_result": "calphad_task",
         # 本地: IDME 数据查询
         "query_idme": "idme_data",
     }
@@ -674,58 +680,76 @@ async def websocket_chat(websocket: WebSocket):
     # LangGraph 配置（thread_id 用于 Checkpointer 持久化）
     config = {"configurable": {"thread_id": session_id}}
 
-    # 发送 connection 事件（前端依赖此事件确认 session_id）
-    await websocket.send_json({
-        "type": "connection",
-        "session_id": session_id,
-        "client_id": session_id[:8],
-        "mode": "chat",
-        "message": "连接成功"
-    })
+    # ★ 初始化阶段保护：accept() 后至 while True 之前，客户端可能因快速刷新/
+    #   网络抖动已断开连接，此时所有 send_json 均会抛出 WebSocketDisconnect /
+    #   ClientDisconnected，必须整体捕获，否则 uvicorn 会输出无意义的 ERROR traceback
+    try:
+        # 发送 connection 事件（前端依赖此事件确认 session_id）
+        await websocket.send_json({
+            "type": "connection",
+            "session_id": session_id,
+            "client_id": session_id[:8],
+            "mode": "chat",
+            "message": "连接成功"
+        })
 
-    # ★ 会话恢复：尝试从 Checkpointer 恢复历史状态
-    # 隐藏问题防护：验证会话归属
-    if _compiled_graph is not None:
-        try:
-            # 验证会话归属（从 Supabase 或内存中查询）
-            # ★ 返回 (session_exists, belongs_to_user) 元组
-            session_exists, session_belongs_to_user = await _verify_session_ownership(session_id, current_user["id"])
-            
-            if session_exists and not session_belongs_to_user:
-                # ★ 会话存在但不属于该用户 → 拒绝访问
-                logger.warning(f"WS 会话恢复拒绝: session={session_id}, user={current_user['id']}, 会话不属于该用户")
-                await websocket.send_json({
-                    "type": "error",
-                    "message": "无权访问此会话"
-                })
-            elif not session_exists:
-                # ★ 新会话，跳过恢复逻辑
-                logger.info(f"WS 新会话（无历史记录）: session={session_id}")
-            else:
-                session_state = await _restore_session_state(_compiled_graph, config, session_id)
-                if session_state:
+        # ★ 会话恢复：尝试从 Checkpointer 恢复历史状态
+        # 隐藏问题防护：验证会话归属
+        if _compiled_graph is not None:
+            try:
+                # 验证会话归属（从 Supabase 或内存中查询）
+                # ★ 返回 (session_exists, belongs_to_user) 元组
+                session_exists, session_belongs_to_user = await _verify_session_ownership(session_id, current_user["id"])
+                
+                if session_exists and not session_belongs_to_user:
+                    # ★ 会话存在但不属于该用户 → 拒绝访问
+                    logger.warning(f"WS 会话恢复拒绝: session={session_id}, user={current_user['id']}, 会话不属于该用户")
                     await websocket.send_json({
-                        "type": "session_state",
-                        "state": session_state
+                        "type": "error",
+                        "message": "无权访问此会话"
                     })
-                    logger.info(f"WS 会话恢复: session={session_id}, messages={len(session_state.get('messages', []))}")
+                elif not session_exists:
+                    # ★ 新会话，跳过恢复逻辑
+                    logger.info(f"WS 新会话（无历史记录）: session={session_id}")
                 else:
-                    # ★ 无历史状态（新会话或状态丢失）
-                    await websocket.send_json({
-                        "type": "session_state",
-                        "state": None,
-                        "is_new": True
-                    })
-                    logger.info(f"WS 新会话/无历史: session={session_id}")
-        except Exception as e:
-            logger.warning(f"会话恢复失败: session={session_id}, error={e}")
-            # ★ 发送恢复失败事件给前端
-            await websocket.send_json({
-                "type": "session_restore_failed",
-                "session_id": session_id,
-                "error": str(e),
-                "message": "无法加载历史对话，将作为新会话继续"
-            })
+                    session_state = await _restore_session_state(_compiled_graph, config, session_id)
+                    if session_state:
+                        await websocket.send_json({
+                            "type": "session_state",
+                            "state": session_state
+                        })
+                        logger.info(f"WS 会话恢复: session={session_id}, messages={len(session_state.get('messages', []))}")
+                    else:
+                        # ★ 无历史状态（新会话或状态丢失）
+                        await websocket.send_json({
+                            "type": "session_state",
+                            "state": None,
+                            "is_new": True
+                        })
+                        logger.info(f"WS 新会话/无历史: session={session_id}")
+            except WebSocketDisconnect:
+                # 会话归属查询或恢复期间客户端断开，重新抛出由外层统一处理
+                raise
+            except Exception as e:
+                logger.warning(f"会话恢复失败: session={session_id}, error={e}")
+                # ★ 发送恢复失败事件给前端（若此时还连着）
+                await websocket.send_json({
+                    "type": "session_restore_failed",
+                    "session_id": session_id,
+                    "error": str(e),
+                    "message": "无法加载历史对话，将作为新会话继续"
+                })
+
+    except WebSocketDisconnect:
+        # 客户端在初始化阶段（connection 事件 / 会话恢复）期间断开
+        # 这是正常的竞态场景（快速刷新、网络抖动），静默处理即可
+        logger.info(f"WS 初始化阶段断开（快速刷新/网络抖动）: session={session_id}")
+        connection_manager.disconnect(session_id)
+        return
+    except Exception as e:
+        logger.warning(f"WS 初始化阶段异常: session={session_id}, error={e}")
+        connection_manager.disconnect(session_id)
+        return
 
     try:
         while True:
@@ -823,6 +847,10 @@ async def websocket_chat(websocket: WebSocket):
                     logger.warning(f"WS resume_interrupt 获取图状态失败: {e}")
                     pending_interrupts = []
 
+                logger.debug(
+                    f"WS resume_interrupt 中断检测: session={session_id}, "
+                    f"interrupts={[i.get('type') for i in pending_interrupts]}"
+                )
                 resume_value = _adapt_resume_value(resume_value, pending_interrupts=pending_interrupts)
                 resume_command = Command(resume=resume_value)
 

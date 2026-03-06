@@ -25,8 +25,9 @@ onMounted(async () => {
 watch(
   () => [authStore.initialized, authStore.isAuthenticated, route.path],
   ([initialized, isAuthenticated, path]) => {
-    // 允许访问 /login 和 /callback（OIDC 回调）
-    if (initialized && !isAuthenticated && path !== '/login' && path !== '/callback') {
+    // 允许访问 /login、/callback、/reset-password（无需登录的公开页面）
+    const publicPaths = ['/login', '/callback', '/reset-password']
+    if (initialized && !isAuthenticated && !publicPaths.includes(path)) {
       console.log('[App] 未登录，跳转至登录页')
       router.replace('/login')
     }

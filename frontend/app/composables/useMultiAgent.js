@@ -80,6 +80,23 @@ export function useMultiAgent() {
   // 挂件缓冲队列（用于 chat_complete 后批量挂载挂件）
   const widgetQueue = ref([])
 
+  // ★ 并行工具执行计数器
+  // 解决问题：多个工具同时运行时，第一个 tool_end 不应过早清除 activeTool 和长任务状态
+  // 规则：tool_ready → +1；tool_end → -1；归零时才清除状态
+  const _runningToolCount = ref(0)
+
+  // ==================== 工具状态辅助函数 ====================
+
+  /**
+   * 清除所有活跃工具状态（并行安全：一次性重置计数器）
+   * 在 chat_complete / interrupt / generate_stopped / stopGenerate / session reset 时调用
+   */
+  const _clearActiveTools = () => {
+    _runningToolCount.value = 0
+    activeTool.value = null
+    setLongTaskStatus(false)
+  }
+
   // ==================== 内部状态重置 ====================
   // 切换/新建会话时，清理所有轮次内部状态，防止跨会话污染
   const _resetSessionState = () => {
@@ -87,7 +104,7 @@ export function useMultiAgent() {
     widgetQueue.value = []
     streamingMessage.value = null
     isAgentTyping.value = false
-    activeTool.value = null
+    _clearActiveTools()
     // 清空 HITL 聚合器（普通对象，直接清空 key）
     for (const k of Object.keys(_hitlAccumulator)) delete _hitlAccumulator[k]
   }
@@ -293,7 +310,7 @@ export function useMultiAgent() {
         }
         break
 
-      // tool_ready：工具参数完整（确认信号）
+      // tool_ready：工具参数完整（确认信号），此处是工具实际开始执行的起点
       case 'tool_ready':
         console.log('[useMultiAgent] tool_ready 收到:', data.tool, data.id)
         if (streamingMessage.value) {
@@ -301,6 +318,11 @@ export function useMultiAgent() {
           finalizeToolBlock(streamingMessage.value, data.tool, data.input, data.id || data.tool_call_id)
           messages.value = [...messages.value]
         }
+        // ★ 并行计数：每个 tool_ready 对应一个正在执行的工具
+        // tool_end 时配对递减，归零才清除状态
+        _runningToolCount.value++
+        activeTool.value = data.tool
+        setLongTaskStatus(true)
         break
 
       // ==================== 标准聊天事件 ====================
@@ -355,15 +377,16 @@ export function useMultiAgent() {
         appendTextToContentBlocks(streamingMessage.value, data.content, data.agent, { blockType: 'pending' })
         break
 
+      // ★ 注意：当前后端不发送 tool_start（已由 tool_call_start + tool_ready 替代）
+      // 保留此分支以兼容可能的旧版或外部后端，但正常流程中不会触发
       case 'tool_start':
+        _runningToolCount.value++
         activeTool.value = data.display_name || data.tool
         setLongTaskStatus(true)
         if (!streamingMessage.value) {
           streamingMessage.value = createNewAgentMessage()
           messages.value.push(streamingMessage.value)
         }
-        // v2: 工具调用前的推理块已通过 reasoning_end 信号处理，直接添加工具块
-        // ★ 使用 tool_call_id 区分不同的工具调用
         addToolBlockToMessage(streamingMessage.value, {
           name: data.tool,
           displayName: data.display_name || data.tool,
@@ -387,21 +410,25 @@ export function useMultiAgent() {
         break
 
       case 'tool_end':
-        // V4: 更新 contentBlocks 中的工具状态
-        // ★ 使用 tool_call_id 精确匹配
+        // ★ 使用 tool_call_id 精确匹配更新工具块状态
         {
           const toolBlock = findToolBlock(streamingMessage.value, data.tool, data.tool_call_id)
           if (toolBlock) {
             toolBlock.isRunning = false
           }
+          // ★ 并行安全：只有所有工具都完成后才清除活跃状态
+          // Math.max(0, ...) 防止计数器因事件乱序变为负数
+          _runningToolCount.value = Math.max(0, _runningToolCount.value - 1)
+          if (_runningToolCount.value === 0) {
+            activeTool.value = null
+            setLongTaskStatus(false)
+          }
         }
-        activeTool.value = null
-        setLongTaskStatus(false)
         break
 
       case 'tool_progress':
-        // 实时更新工具执行进度 (V3.0)
-        updateToolProgress(data.tool, data.progress, data.message, data.step)
+        // ★ 传入 tool_call_id，确保同名工具多次调用时进度更新到正确的工具块
+        updateToolProgress(data.tool, data.progress, data.message, data.step, data.tool_call_id)
         break
 
       case 'tool_result':
@@ -413,11 +440,18 @@ export function useMultiAgent() {
             break
           }
           emittedToolResults.value.add(dedupeKey)
-          // V4: 更新工具块结果（使用 tool_call_id 精确匹配）
+          // 更新工具块结果（使用 tool_call_id 精确匹配）
           const toolBlock = findToolBlock(streamingMessage.value, data.tool, data.tool_call_id)
           if (toolBlock) {
             toolBlock.result = data.result
             toolBlock.isRunning = false
+            // ★ 错误标记：优先使用后端下发的 is_error 字段（精确），
+            //   兜底检测错误关键词（兼容未升级后端）
+            const resultStr = typeof data.result === 'string' ? data.result : ''
+            if (data.is_error || /工具调用失败|执行失败|超时/.test(resultStr)) {
+              toolBlock.hasError = true
+              toolBlock.errorMessage = resultStr
+            }
           }
           // ★ 将工具输入参数（input）一并传递给结果处理器，用于重建成分字符串等
           handleToolResult({ ...data, toolInput: toolBlock?.input || null })
@@ -438,8 +472,7 @@ export function useMultiAgent() {
       case 'chat_complete':
         // v3: 流式消息完成 - 将所有 pending 块确定为 chat，收起 thinking 块
         isAgentTyping.value = false
-        activeTool.value = null
-        setLongTaskStatus(false)
+        _clearActiveTools()
 
         if (streamingMessage.value) {
           // ★ 核心：将剩余 pending 块确定为 chat 块
@@ -561,8 +594,7 @@ export function useMultiAgent() {
             streamingMessage.value = null
             messages.value = [...messages.value]
             isAgentTyping.value = false
-            activeTool.value = null
-            setLongTaskStatus(false)
+            _clearActiveTools()
             // ★ 保存 UI 快照（确保 interrupt 状态可恢复）
             saveUISnapshot()
             break
@@ -579,8 +611,12 @@ export function useMultiAgent() {
                 block.isRunning = false
                 block.isPaused = true
                 if (!block.interruptPayload && data.payload) {
-                  // 每个工具块只注入自己对应的 action，避免显示全部工具参数
-                  const matchedAction = allActionRequests.find(a => a.name === block.name)
+                  // ★ 优先按 tool_call_id (a.id === block.id) 匹配，
+                  //   确保同名工具多次调用时每个块注入自己正确的 action；
+                  //   兜底按工具名匹配（兼容未携带 id 的旧版中间件）
+                  const matchedAction = allActionRequests.find(a =>
+                    (a.id && block.id) ? a.id === block.id : a.name === block.name
+                  )
                   block.interruptPayload = matchedAction
                     ? { ...data.payload, action_requests: [matchedAction] }
                     : data.payload
@@ -593,8 +629,7 @@ export function useMultiAgent() {
           streamingMessage.value = null
           messages.value = [...messages.value]
           isAgentTyping.value = false
-          activeTool.value = null
-          setLongTaskStatus(false)
+          _clearActiveTools()
           // ★ 保存 UI 快照（确保 HITL 状态可恢复）
           saveUISnapshot()
         }
@@ -612,7 +647,7 @@ export function useMultiAgent() {
         }
         isAgentTyping.value = false
         currentAgent.value = 'System'
-        activeTool.value = null
+        _clearActiveTools()
         break
 
       default:
@@ -658,11 +693,11 @@ export function useMultiAgent() {
   /**
    * 更新工具进度（统一接口）
    */
-  const updateToolProgress = (toolName, progress, message, step) => {
+  const updateToolProgress = (toolName, progress, message, step, toolCallId = null) => {
     const targetMsg = streamingMessage.value || messages.value.findLast(m => m.type === 'agent')
     if (!targetMsg) return
-    
-    const toolBlock = findToolBlock(targetMsg, toolName)
+    // ★ 优先按 tool_call_id 精确匹配，避免同名工具多次调用时更新到错误的工具块
+    const toolBlock = findToolBlock(targetMsg, toolName, toolCallId)
     if (toolBlock) {
       toolBlock.isRunning = true
       toolBlock.progress = progress
@@ -910,8 +945,7 @@ export function useMultiAgent() {
       streamingMessage.value = null
     }
     isAgentTyping.value = false
-    activeTool.value = null
-    setLongTaskStatus(false)
+    _clearActiveTools()
   }
 
   const canSendMessage = computed(() => isConnected.value && !isAgentTyping.value)

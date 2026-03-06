@@ -34,6 +34,7 @@ ALLOWED_TOOLS = {
     "calphamesh_submit_point_task",
     "calphamesh_submit_line_task",
     "calphamesh_submit_scheil_task",
+    "calphamesh_get_task_result",
     "calphamesh_get_task_status",
     "calphamesh_list_tasks",
 }
@@ -42,115 +43,59 @@ ALLOWED_TOOLS = {
 ONNX_TOOL_NAMES = {"onnx_model_inference", "onnx_models_list", "onnx_get_model_config"}
 CALPHAD_TOOL_NAMES = {
     "calphamesh_submit_point_task", "calphamesh_submit_line_task",
-    "calphamesh_submit_scheil_task", "calphamesh_get_task_status",
+    "calphamesh_submit_scheil_task", "calphamesh_get_task_result",
+    "calphamesh_get_task_status",
     "calphamesh_list_tasks",
 }
 
 # ==================== 工具描述增强 ====================
-# MCP 原生工具描述太简短，这里提供详细描述供 LLM 理解
+# ONNX: 服务端描述过于简略 → 完整替换
+# CalphaMesh: 服务端描述已足够详细（含参数 schema / enum / range）→ 仅追加业务语义补充
+# get_task_result / get_task_status / list_tasks: 服务端描述已充分 → 不修改
+
 TOOL_DESCRIPTIONS = {
-    # ONNX 工具
     "onnx_models_list": """获取所有可用 ONNX 模型列表。
-返回格式：模型名称、版本、状态([已加载]/[未加载])、UUID。""",
-    
+返回：模型名称、版本、状态（[已加载]/[未加载]）、UUID。""",
+
     "onnx_model_inference": """执行 ONNX 模型推理预测铝合金性能。
 
 参数：
 - uuid: 模型UUID（推荐: 9fa6d60e-55ea-4035-96f2-6f9cfa1a9696）
-- inputs: 成分输入字典，格式为 W(元素名) 的质量百分比
+- inputs: 质量百分比字典，格式 W(元素名)，需包含全部 15 种元素（缺失设 0）
 
-输入格式（AlSiMg_properties_v1）：
-需要15个元素的质量%，缺失的元素设为0。例如 Al-7Si-0.3Mg：
-{
-  "W(Si)": 7.0, "W(Mg)": 0.3, "W(Fe)": 0.0, "W(Cu)": 0.0, 
-  "W(Zn)": 0.0, "W(Mn)": 0.0, "W(Ti)": 0.0, "W(Sr)": 0.0, 
-  "W(Ce)": 0.0, "W(Ni)": 0.0, "W(Cr)": 0.0, "W(Sn)": 0.0, 
-  "W(Zr)": 0.0, "W(Mo)": 0.0, "W(La)": 0.0
+示例（Al-7Si-0.3Mg）：
+{"W(Si)": 7.0, "W(Mg)": 0.3, "W(Fe)": 0.0, "W(Cu)": 0.0, "W(Zn)": 0.0, "W(Mn)": 0.0, "W(Ti)": 0.0, "W(Sr)": 0.0, "W(Ce)": 0.0, "W(Ni)": 0.0, "W(Cr)": 0.0, "W(Sn)": 0.0, "W(Zr)": 0.0, "W(Mo)": 0.0, "W(La)": 0.0}
+
+首次调用自动加载模型，[未加载] 状态正常。返回 UTS、YS、EL 等性能指标。""",
+
+    "onnx_get_model_config": """查询指定 ONNX 模型的输入参数列表、取值范围和输出参数。
+参数：uuid（模型UUID）。用途：确认非默认模型所需的输入格式。""",
 }
 
-★ 懒加载说明：模型列表显示 [未加载] 是正常的，首次调用会自动加载。
+# CalphaMesh submit 工具：追加到服务端描述之后（不替换）
+# 仅补充服务端 schema 无法表达的业务语义——TDB 支持元素完整列表及过滤归一化规则
 
-返回：UTS(抗拉强度)、YS(屈服强度)、EL(延伸率) 等性能指标。""",
-    
-    "onnx_get_model_config": """查询指定 ONNX 模型的详细配置信息。
-参数：uuid（模型UUID）
-返回：模型的输入参数列表、取值范围、输出参数等。
-用途：当需要使用非 AlSiMg_properties_v1 的模型时，先调用此工具查看该模型需要的输入参数格式。""",
-    
-    # Calphad 工具
-    #
-    # 共享参数说明块（所有 submit 工具共用）
-    # 在各自描述中直接内联，避免 LLM 漏读
+# 各 TDB 支持元素完整列表（过滤时严格按此执行，列表之外的元素一律不加入）
+_TDB_ELEMENT_LISTS = (
+    "\n\n[TDB 支持元素完整列表]"
+    "\n  • FE-C-SI-MN-CU-TI-O.TDB   → 仅支持：FE、C、SI、MN、CU、TI、O（共 7 种）"
+    "\n  • B-C-SI-ZR-HF-LA-Y-TI-O.TDB → 仅支持：B、C、SI、ZR、HF、LA、Y、TI、O（共 9 种）"
+    "\n  （AL、MG、SR、NI、CR 等铝合金常见元素均不在任何可用 TDB 中）"
+)
 
-    "calphamesh_submit_point_task": """提交单点平衡计算任务（异步），返回 task_id，不是结果。提交后必须调用 calphamesh_get_task_status 查询结果。
+CALPHAMESH_SUBMIT_RULES = (
+    _TDB_ELEMENT_LISTS
+    + "\n\n调用前必须完成以下三步，否则服务端会直接拒绝："
+    "\n  1. 对照上述支持列表，将 composition 中不在列表内的元素全部剔除（不得替代）。"
+    "\n  2. 对保留元素重新归一化：f_i = n_i / Σn_j；最后将最大分量设为 1.0 - Σ(其余元素 f_j)，"
+    "使总和严格等于 1.0。"
+    "\n  3. 用过滤后的 components 和归一化后的 composition 提交，结果标注为受支持元素子系统趋势分析。"
+)
 
-参数：
-- components: 大写元素列表，如 ["SI", "FE"]
-- composition: 原子分数字典（大写符号，总和必须精确=1.0）
-- temperature: 温度（K）
-- tdb_file: 数据库文件名（AL-DEFAULT.TDB 支持 SI, FE, MN, CU, TI, SR 等，不含 AL/MG）
-
-**composition 计算规则（AL-DEFAULT.TDB）：**
-1. 过滤：仅保留数据库支持的元素（去除 AL、MG）
-2. 各元素摩尔数 = 质量% ÷ 原子量（Si=28.09, Fe=55.85, Mn=54.94, Cu=63.55, Ti=47.87, Sr=87.62）
-3. 各元素初始原子分数 = 摩尔数 ÷ 摩尔数总和
-4. **精度保证**：将最大分量设为 `1.0 - 其余各分量之和`，确保总和精确=1.0
-
-返回：task_id（字符串）""",
-
-    "calphamesh_submit_scheil_task": """提交 Scheil 凝固模拟任务（异步），返回 task_id，不是结果。提交后必须调用 calphamesh_get_task_status 查询结果。
-
-参数：
-- components: 大写元素列表
-- composition: 原子分数字典（总和必须精确=1.0）
-- start_temperature: 起始温度（K）
-- temperature_step: 温度步长（K）
-- tdb_file: 数据库文件名
-
-**composition 计算规则（AL-DEFAULT.TDB）：**
-1. 过滤：仅保留数据库支持的元素（去除 AL、MG）
-2. 各元素摩尔数 = 质量% ÷ 原子量（Si=28.09, Fe=55.85, Mn=54.94, Cu=63.55, Ti=47.87, Sr=87.62）
-3. 各元素初始原子分数 = 摩尔数 ÷ 摩尔数总和
-4. **精度保证**：将最大分量设为 `1.0 - 其余各分量之和`，确保总和精确=1.0
-
-返回：task_id（字符串）""",
-
-    "calphamesh_submit_line_task": """提交线性扫描计算任务（异步），返回 task_id，不是结果。提交后必须调用 calphamesh_get_task_status 查询结果。
-
-参数：
-- components: 大写元素列表
-- start_composition / end_composition: 起止成分（原子分数，各自总和必须精确=1.0）
-- start_temperature / end_temperature: 起止温度（K）
-- steps: 计算步数
-- tdb_file: 数据库文件名
-
-**composition 计算规则（AL-DEFAULT.TDB）：**
-1. 过滤：仅保留数据库支持的元素（去除 AL、MG）
-2. 各元素摩尔数 = 质量% ÷ 原子量（Si=28.09, Fe=55.85, Mn=54.94, Cu=63.55, Ti=47.87, Sr=87.62）
-3. 各元素初始原子分数 = 摩尔数 ÷ 摩尔数总和
-4. **精度保证**：将最大分量设为 `1.0 - 其余各分量之和`，确保总和精确=1.0
-
-返回：task_id（字符串）""",
-
-    "calphamesh_get_task_status": """查询 Calphad 任务的状态和计算结果。
-
-参数：task_id（submit 工具返回的任务 ID）
-
-返回值含义：
-- status = "completed"：result 字段包含实际计算数据，可以解读
-- status = "pending" 或 "running"：任务还在计算中，result 为空
-  → 你应该停止调用工具，用文本告知用户"任务 {task_id} 仍在计算中，请稍后再问"
-  → 不要对 pending/running 的任务假装已有结果
-- status = "failed"：error 字段包含错误原因
-
-使用规则：
-- 每个 submit 工具返回的 task_id 都必须用本工具查询一次
-- 如果有多个 task_id，逐个查询
-- pending/running 时不要重复轮询同一个 task_id，告知用户等待即可""",
-
-    "calphamesh_list_tasks": """列出用户的 Calphad 任务历史。
-可选参数：page、items_per_page
-用于查看历史计算记录。""",
+TOOL_DESCRIPTION_ADDONS = {
+    "calphamesh_submit_point_task": CALPHAMESH_SUBMIT_RULES,
+    "calphamesh_submit_scheil_task": CALPHAMESH_SUBMIT_RULES,
+    "calphamesh_submit_line_task": CALPHAMESH_SUBMIT_RULES,
 }
 
 
@@ -220,12 +165,15 @@ async def init_mcp_client() -> List[Any]:
         # 过滤只保留铝合金场景需要的工具
         filtered_tools = [t for t in all_tools if t.name in ALLOWED_TOOLS]
         
-        # ★ 增强工具描述（MCP 原生描述太简短）
+        # ★ 增强工具描述
+        # - TOOL_DESCRIPTIONS: 完整替换（服务端描述不足的工具）
+        # - TOOL_DESCRIPTION_ADDONS: 追加补充（服务端描述已充分的工具）
         _mcp_tools = []
         for tool in filtered_tools:
             if tool.name in TOOL_DESCRIPTIONS:
-                # 替换为详细描述
                 tool.description = TOOL_DESCRIPTIONS[tool.name]
+            elif tool.name in TOOL_DESCRIPTION_ADDONS:
+                tool.description += TOOL_DESCRIPTION_ADDONS[tool.name]
             _mcp_tools.append(tool)
 
         logger.info(

@@ -182,65 +182,172 @@ const restoreONNXResult = (content, store) => {
  * 恢复 Calphad 热力学计算结果
  */
 const restoreCalPhadResult = (content, store) => {
-  // 纯文本消息（如 "Point计算任务已..."）无法恢复图表
-  if (content.message && !content.result) {
-    console.log('[SessionRestorer] Calphad 结果为纯文本，跳过图表恢复:', content.message.slice(0, 50))
+  let parsedContent = content
+  if (typeof parsedContent === 'string') {
+    try {
+      parsedContent = JSON.parse(parsedContent)
+    } catch {
+      return false
+    }
+  }
+
+  if (!parsedContent || typeof parsedContent !== 'object') {
     return false
   }
-  
-  if (content.status !== 'success' || !content.result) {
+
+  const buildScheilSeries = (payload) => {
+    const rawCurve = payload?.result?.raw_data
+    if (rawCurve?.temperatures && rawCurve?.liquid_fractions) {
+      return rawCurve.temperatures
+        .map((temperature, idx) => {
+          const liquid = Number(rawCurve.liquid_fractions[idx] ?? 0)
+          return {
+            temperature: Number(temperature),
+            liquid,
+            solid: Number(rawCurve.solid_fractions?.[idx] ?? (1 - liquid))
+          }
+        })
+        .filter(item => !Number.isNaN(item.temperature))
+    }
+
+    const keyPoints = payload?.result?.data_summary?.key_points || []
+    return keyPoints
+      .map(point => ({
+        temperature: Number(point.temperature_K ?? point.temperature ?? 0),
+        liquid: Number(point.liquid_fraction ?? 0),
+        solid: Number(point.solid_fraction ?? (1 - Number(point.liquid_fraction ?? 0)))
+      }))
+      .filter(item => !Number.isNaN(item.temperature))
+  }
+
+  const buildLineSeries = (payload) => {
+    const rows = payload?.result?.raw_data || payload?.result?.data_summary?.rows || []
+    const phases = new Set()
+
+    const data = rows
+      .map(row => {
+        if (!row || typeof row !== 'object') return null
+        const temperature = Number(
+          row['T/K'] ??
+          row.temperature ??
+          row.temperature_K ??
+          row['temperature_K'] ??
+          row['Temperature'] ??
+          NaN
+        )
+        if (Number.isNaN(temperature)) return null
+
+        const normalized = { temperature }
+        Object.entries(row).forEach(([key, value]) => {
+          const match = key.match(/^f\((.+)\)$/)
+          if (!match) return
+          const phase = match[1]
+          const numericValue = Number(value)
+          if (!Number.isNaN(numericValue)) {
+            normalized[phase] = numericValue
+            phases.add(phase)
+          }
+        })
+        return normalized
+      })
+      .filter(Boolean)
+
+    return { data, phases: Array.from(phases) }
+  }
+
+  // 新 MCP 契约：只恢复真正的 get_task_result 结果
+  if (parsedContent.task_type) {
+    if (['pending', 'running', 'still_running'].includes(parsedContent.status)) {
+      return false
+    }
+
+    if (parsedContent.task_type === 'scheil_solidification') {
+      const scheilSeries = buildScheilSeries(parsedContent)
+      if (scheilSeries.length > 0) {
+        store.addResult('scheil', 'Scheil 凝固曲线', {
+          data: scheilSeries,
+          raw: parsedContent,
+          title: 'Scheil 凝固曲线'
+        })
+      } else {
+        store.addResult('thermo_scheil', 'Scheil 凝固分析', parsedContent)
+      }
+      return true
+    }
+
+    if (parsedContent.task_type === 'line_calculation') {
+      const { data, phases } = buildLineSeries(parsedContent)
+      if (data.length > 0 && phases.length > 0) {
+        store.addResult('phase_fraction', '相分数曲线', {
+          data,
+          phases,
+          raw: parsedContent,
+          title: '相分数-温度曲线'
+        })
+      } else {
+        store.addResult('thermo_line', '线计算结果', parsedContent)
+      }
+      return true
+    }
+
+    if (parsedContent.task_type === 'point_calculation') {
+      store.addResult('thermo_point', '热力学点计算', parsedContent)
+      return true
+    }
+
+    store.addResult('thermo_point', '热力学结果', parsedContent)
+    return true
+  }
+
+  // 兼容旧格式
+  if (parsedContent.message && !parsedContent.result) {
+    console.log('[SessionRestorer] Calphad 结果为纯文本，跳过图表恢复:', parsedContent.message.slice(0, 50))
     return false
   }
-  
-  const calcType = content.calculation_type || 'scheil'
-  const resultData = content.result
-  const composition = content.composition || '未知成分'
-  
+
+  if (parsedContent.status !== 'success' || !parsedContent.result) {
+    return false
+  }
+
+  const calcType = parsedContent.calculation_type || 'scheil'
+  const resultData = parsedContent.result
+  const composition = parsedContent.composition || '未知成分'
+
   switch (calcType) {
     case 'scheil':
-      // Scheil 凝固曲线
       store.addResult('scheil', 'Scheil 凝固曲线', {
         composition,
         data: resultData.scheil_data || resultData,
         title: `${composition} Scheil 凝固曲线`
       })
       return true
-    
+
     case 'phase_fraction':
-      // 相分数-温度曲线
       store.addResult('phase_fraction', '相分数曲线', {
         composition,
         data: resultData.phase_data || resultData,
         title: `${composition} 相分数曲线`
       })
       return true
-    
+
     case 'point':
-      // 热力学点计算
       store.addResult('thermo_point', '热力学点计算', {
         composition,
         data: resultData,
         title: `${composition} 热力学点计算`
       })
       return true
-    
+
     case 'line':
-      // 相图线计算
       store.addResult('thermo_line', '相图计算', {
         composition,
         data: resultData,
         title: `${composition} 相图线计算`
       })
       return true
-    
+
     default:
-      // 通用热力学结果
-      store.addResult('thermo', '热力学综合分析', {
-        composition,
-        data: resultData,
-        calculation_type: calcType
-      })
-      return true
+      return false
   }
 }
 

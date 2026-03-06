@@ -1,138 +1,93 @@
 <template>
   <div class="performance-card">
-    <!-- 头部：成分 + 状态标签 -->
+    <!-- 头部：成分 + 预测标签 -->
     <div class="card-header">
-      <h4 class="card-title">{{ data.composition }}</h4>
-      <el-tag size="small" type="success" effect="plain">ONNX 预测</el-tag>
+      <h4 class="card-title">{{ data.composition || '—' }}</h4>
+      <div class="header-meta">
+        <span class="meta-badge">ONNX</span>
+        <span v-if="data.heat_treatment" class="meta-state">{{ data.heat_treatment }}</span>
+      </div>
     </div>
-    
-    <!-- 性能指标列表 -->
-    <div class="property-list">
-      <div
-        v-for="prop in properties"
-        :key="prop.key"
-        class="property-item"
-      >
-        <!-- 指标头部：名称 + 数值 + 等级 -->
-        <div class="property-header">
-          <div class="property-info">
-            <span class="property-label">{{ prop.label }}</span>
-            <span class="property-unit">{{ prop.unit }}</span>
-          </div>
-          <div class="property-value-box">
-            <span class="property-value">{{ formatValue(getValue(prop.key)) }}</span>
-            <el-tag 
-              :type="getGradeType(getPercentage(prop.key, prop.max))" 
-              size="small" 
-              effect="plain"
-              class="grade-tag"
-            >
-              {{ getGrade(getPercentage(prop.key, prop.max)) }}
-            </el-tag>
-          </div>
+
+    <!-- 核心指标网格：紧凑布局 -->
+    <div class="metrics-grid">
+      <div v-for="prop in properties" :key="prop.key" class="metric-item">
+        <div class="metric-label">
+          {{ prop.name }} <span class="property-symbol" v-html="prop.symbol"></span>
+          <span class="metric-unit">({{ prop.unit }})</span>
         </div>
-        
-        <!-- 可视化进度条 + 参考刻度 -->
-        <div class="property-bar-container">
-          <div class="property-bar">
-            <div 
-              class="property-fill" 
-              :style="{ 
-                width: `${getPercentage(prop.key, prop.max)}%`,
-                backgroundColor: getBarColor(getPercentage(prop.key, prop.max))
-              }"
-            >
-              <span class="fill-label" v-if="getPercentage(prop.key, prop.max) > 15">
-                {{ getPercentage(prop.key, prop.max).toFixed(0) }}%
-              </span>
-            </div>
-          </div>
-          <div class="property-scale">
-            <span class="scale-mark scale-min">0</span>
-            <span class="scale-mark scale-mid">{{ (prop.max / 2).toFixed(0) }}</span>
-            <span class="scale-mark scale-max">{{ prop.max }}</span>
-          </div>
+        <div class="metric-value-container">
+          <span class="value">{{ formatValue(getValue(prop.key)) }}</span>
+        </div>
+      </div>
+      
+      <!-- 屈强比派生指标 -->
+      <div class="metric-item highlight" v-if="yieldRatio > 0">
+        <div class="metric-label">
+          屈强比 <span class="property-symbol" v-html="'R<sub>p0.2</sub>/R<sub>m</sub>'"></span>
+        </div>
+        <div class="metric-value-container">
+          <span class="value">{{ yieldRatio }}</span>
         </div>
       </div>
     </div>
-    
+
     <!-- 底部说明 -->
     <div class="card-footer">
-      <el-icon :size="14"><InformationCircleOutline /></el-icon>
-      <span class="footer-text">预测基于 Al-Si-Mg 系铝合金训练数据</span>
+      <el-icon :size="12"><InformationCircleOutline /></el-icon>
+      <span>预测基于 Al-Si-Mg 系铝合金训练数据，数值需经实验验证后方可用于工程决策。</span>
     </div>
   </div>
 </template>
 
 <script setup>
 /**
- * 单个合金性能卡片组件（专业版）
- * 展示抗拉强度、屈服强度、延伸率，带性能等级评估
+ * 铝合金力学性能预测卡片 (紧凑网格版)
+ * 符号规范遵循 GB/T 228.1：Rm（抗拉强度）、Rp0.2（屈服强度）、A（断后伸长率）
  */
+import { computed } from 'vue'
 import { InformationCircleOutline } from '@vicons/ionicons5'
-import { ElTag, ElIcon } from 'element-plus'
+import { ElIcon } from 'element-plus'
 
 const props = defineProps({
   data: {
     type: Object,
-    required: true
+    required: true,
+    default: () => ({})
   }
 })
 
-// 性能指标定义（基于铝合金行业标准）
 const properties = [
-  { key: 'tensile_strength', label: '抗拉强度', unit: 'MPa', max: 500 },
-  { key: 'yield_strength', label: '屈服强度', unit: 'MPa', max: 400 },
-  { key: 'elongation', label: '延伸率', unit: '%', max: 30 }
+  { key: 'tensile_strength', name: '抗拉强度', symbol: 'R<sub>m</sub>',     unit: 'MPa' },
+  { key: 'yield_strength',   name: '屈服强度', symbol: 'R<sub>p0.2</sub>',  unit: 'MPa' },
+  { key: 'elongation',       name: '断后伸长率', symbol: 'A',               unit: '%'   }
 ]
 
 const getValue = (key) => {
-  return props.data[key] || 0
+  const v = props.data[key]
+  return (v !== undefined && v !== null) ? Number(v) : 0
 }
 
-const formatValue = (value) => {
-  return value.toFixed(1)
-}
+const formatValue = (value) => Number(value).toFixed(1)
 
-const getPercentage = (key, max) => {
-  const value = getValue(key)
-  return Math.min((value / max) * 100, 100)
-}
-
-// 颜色系统：基于材料性能等级
-const getBarColor = (percentage) => {
-  if (percentage >= 80) return '#10b981' // 优秀 - 绿色
-  if (percentage >= 60) return '#3b82f6' // 良好 - 蓝色
-  if (percentage >= 40) return '#f59e0b' // 中等 - 橙色
-  return '#ef4444' // 偏低 - 红色
-}
-
-// 性能等级标签
-const getGrade = (percentage) => {
-  if (percentage >= 80) return '优秀'
-  if (percentage >= 60) return '良好'
-  if (percentage >= 40) return '中等'
-  return '偏低'
-}
-
-const getGradeType = (percentage) => {
-  if (percentage >= 80) return 'success'
-  if (percentage >= 60) return 'primary'
-  if (percentage >= 40) return 'warning'
-  return 'danger'
-}
+/** 屈强比（Rp0.2 / Rm）：表征加工硬化余量的标准工程参数 */
+const yieldRatio = computed(() => {
+  const uts = getValue('tensile_strength')
+  const ys  = getValue('yield_strength')
+  if (uts <= 0 || ys <= 0) return 0
+  return (ys / uts).toFixed(2)
+})
 </script>
 
 <style scoped>
 .performance-card {
-  /* 移除外层已有卡片样式，避免"盒中盒"嵌套 */
   background: transparent;
-  padding: 0; /* 依靠外层父组件的 padding */
+  padding: 0;
   border: none;
   box-shadow: none;
 }
 
-/* 头部 */
+/* ── 头部 ── */
 .card-header {
   display: flex;
   justify-content: space-between;
@@ -140,146 +95,128 @@ const getGradeType = (percentage) => {
   margin-bottom: 12px;
   padding: 8px 12px;
   background: var(--bg-secondary, #f8fafc);
-  border-radius: 8px;
-  border: 1px solid var(--border-light, #e5e7eb);
+  border-radius: 6px;
+  border: 1px solid var(--border-light, #e2e8f0);
 }
 
 .card-title {
   margin: 0;
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text-primary);
-  font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
-  letter-spacing: -0.02em;
-}
-
-/* 性能指标列表 */
-.property-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.property-item {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-/* 指标头部 */
-.property-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.property-info {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-}
-
-.property-label {
-  font-size: 11px;
-  color: var(--text-secondary);
+  font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.01em;
+  color: var(--text-primary, #0f172a);
+  font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+  letter-spacing: -0.01em;
+  word-break: break-all;
 }
 
-.property-unit {
-  font-size: 9px;
-  color: var(--text-tertiary);
-  font-weight: 500;
-}
-
-.property-value-box {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.property-value {
-  font-size: 14px;
-  color: var(--text-primary);
-  font-weight: 700;
-  font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
-  letter-spacing: -0.02em;
-}
-
-.grade-tag {
-  font-size: 9px;
-  padding: 0 4px;
-  height: 16px;
-  line-height: 14px;
-  font-weight: 600;
-}
-
-/* 进度条容器 */
-.property-bar-container {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.property-bar {
-  width: 100%;
-  height: 6px;
-  background: linear-gradient(to right, #f3f4f6, #e5e7eb);
-  border-radius: 3px;
-  overflow: hidden;
-  position: relative;
-}
-
-.property-fill {
-  height: 100%;
-  border-radius: 3px;
-  transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s ease;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  padding-right: 4px;
-  position: relative;
-}
-
-.fill-label {
-  font-size: 8px;
-  color: white;
-  font-weight: 700;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-}
-
-/* 刻度标记 */
-.property-scale {
-  display: flex;
-  justify-content: space-between;
-  padding: 0 1px;
-}
-
-.scale-mark {
-  font-size: 9px;
-  color: var(--text-tertiary);
-  font-weight: 500;
-  font-family: 'SF Mono', monospace;
-}
-
-/* 底部说明 */
-.card-footer {
-  margin-top: 12px;
-  padding-top: 10px;
-  border-top: 1px dashed var(--border-light);
+.header-meta {
   display: flex;
   align-items: center;
   gap: 4px;
-  color: var(--text-tertiary);
+  flex-shrink: 0;
+  margin-left: 8px;
 }
 
-.footer-text {
+.meta-badge {
+  font-size: 10px;
+  font-weight: 600;
+  color: #475569;
+  background: #e2e8f0;
+  border-radius: 3px;
+  padding: 1px 6px;
+  letter-spacing: 0.02em;
+}
+
+.meta-state {
+  font-size: 10px;
+  font-weight: 500;
+  color: #64748b;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 3px;
+  padding: 1px 6px;
+}
+
+/* ── 指标网格 (紧凑布局) ── */
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.metric-item {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 10px 4px;
+  background: var(--bg-secondary, #f9fafb);
+  border-radius: 6px;
+  border: 1px solid var(--border-light, #e5e7eb);
+}
+
+.metric-item.highlight {
+  background: #f0f9ff;
+  border-color: #bae6fd;
+}
+
+.metric-label {
+  font-size: 11px;
+  color: var(--text-tertiary, #64748b);
+  margin-bottom: 4px;
+  white-space: nowrap;
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+}
+
+.property-symbol {
+  font-style: italic;
+  font-family: 'Times New Roman', Times, serif;
+}
+
+.metric-unit {
   font-size: 9px;
-  line-height: 1.2;
+  color: #94a3b8;
 }
 
-/* 悬停效果 */
-.property-item:hover .property-fill {
-  filter: brightness(1.1);
+.metric-value-container {
+  display: flex;
+  align-items: baseline;
+}
+
+.value {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary, #0f172a);
+  font-family: 'SF Mono', 'Consolas', monospace;
+  letter-spacing: -0.02em;
+}
+
+.metric-item.highlight .value {
+  color: #0369a1;
+}
+
+/* 响应式：窄屏幕下自动切为 2x2 */
+@media (max-width: 500px) {
+  .metrics-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* ── 底部说明 ── */
+.card-footer {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-light, #e2e8f0);
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+}
+
+.card-footer span {
+  font-size: 10px;
+  line-height: 1.4;
+  color: #94a3b8;
 }
 </style>

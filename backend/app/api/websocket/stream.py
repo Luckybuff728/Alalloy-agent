@@ -178,8 +178,18 @@ async def stream_graph_events(
                         if isinstance(msg, ToolMessage):
                             tool_name = msg.name or "unknown"
                             tool_call_id = msg.tool_call_id or ""
+                            # ★ LangChain ToolMessage.status 为 "error" 时表示工具执行失败
+                            # （ToolRetryMiddleware on_failure 返回的错误字符串会触发此状态）
+                            is_error = getattr(msg, "status", None) == "error"
                             yield {"type": "tool_end", "tool": tool_name, "tool_call_id": tool_call_id, "agent": display_name}
-                            yield {"type": "tool_result", "tool": tool_name, "result": msg.content or "", "tool_call_id": tool_call_id, "agent": display_name}
+                            yield {
+                                "type": "tool_result",
+                                "tool": tool_name,
+                                "result": msg.content or "",
+                                "tool_call_id": tool_call_id,
+                                "agent": display_name,
+                                "is_error": is_error,
+                            }
                         elif hasattr(msg, "tool_calls") and msg.tool_calls:
                             for tc in msg.tool_calls:
                                 if isinstance(tc, dict):

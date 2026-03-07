@@ -16,6 +16,9 @@ services:
     volumes:
       - ./logs:/app/logs
       - ./backend/reports:/app/reports
+    extra_hosts:
+      # 让容器内可通过 host.docker.internal 访问宿主机（MCP 服务等）
+      - "host.docker.internal:host-gateway"
     networks:
       - alalloy-network
     healthcheck:

@@ -67,7 +67,9 @@ export default defineNuxtConfig({
       // 开发模式：跳过 IAM 认证
       devMode: process.env.NUXT_PUBLIC_DEV_MODE === 'true' || process.env.VITE_DEV_MODE === 'true',
       // 后端配置
-      backendHost: process.env.VITE_BACKEND_HOST || 'localhost',
+      // ★ 默认空字符串：生产 Nginx 代理场景下使用相对路径（/api/...）
+      // 本地开发时在 frontend/.env 中设置 VITE_BACKEND_HOST=localhost
+      backendHost: process.env.VITE_BACKEND_HOST || '',
       backendPort: process.env.VITE_BACKEND_PORT || '8001',
       apiBaseUrl: process.env.VITE_API_BASE_URL,
       wsBaseUrl: process.env.VITE_WS_BASE_URL,

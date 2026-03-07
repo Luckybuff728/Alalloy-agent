@@ -31,12 +31,17 @@ const getRuntimeConfig = () => {
 const config = getRuntimeConfig()
 
 // 后端 API 地址
-const API_BASE_URL = config.public.apiBaseUrl || 
-  `http://${config.public.backendHost}:${config.public.backendPort}`
+// 优先级: VITE_API_BASE_URL > 空字符串（Nginx 代理相对路径）> backendHost:port（本地开发直连）
+// 生产部署：Nginx 反代时设置 backendHost="" 或 VITE_API_BASE_URL="" 使用相对路径
+const _host = config.public.backendHost
+const API_BASE_URL = (config.public.apiBaseUrl != null && config.public.apiBaseUrl !== '')
+  ? config.public.apiBaseUrl
+  : (_host ? `http://${_host}:${config.public.backendPort}` : '')
 
-// WebSocket 基础地址
-const WS_BASE_URL = config.public.wsBaseUrl || 
-  `ws://${config.public.backendHost}:${config.public.backendPort}`
+// WebSocket 基础地址（空字符串在浏览器中会自动使用当前页面的协议和域名）
+const WS_BASE_URL = (config.public.wsBaseUrl != null && config.public.wsBaseUrl !== '')
+  ? config.public.wsBaseUrl
+  : (_host ? `ws://${_host}:${config.public.backendPort}` : '')
 
 // WebSocket 端点
 const WS_ENDPOINTS = {

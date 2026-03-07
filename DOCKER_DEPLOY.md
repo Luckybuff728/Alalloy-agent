@@ -44,9 +44,14 @@ docker compose push
 ```
 
 **构建时自动完成的事：**
-- 前端 `VITE_BACKEND_HOST=""` → 所有 API/WebSocket 使用相对路径 `/api/` `/ws/`，由容器内 Nginx 代理，无硬编码地址
-- `SUPABASE_URL` / `SUPABASE_ANON_KEY` 从 `.env` 读取，烧入 SPA bundle
+- 前端 `VITE_BACKEND_HOST=""` 空字符串 → 所有 API/WebSocket 使用相对路径 `/api/` `/ws/`，由容器内 Nginx 代理，无硬编码地址
+- Supabase URL/anon key 已直接写入 `Dockerfile.frontend`（公开客户端凭据，可以内嵌），无需从 `.env` 传入
 - `NUXT_PUBLIC_AUTH_PROVIDER=both` → 同时显示 Supabase 邮箱登录 + FerrisKey SSO 按钮
+
+> **关于 `.env` 文件与 Docker 镜像：**
+> - `.env`（根目录，后端密钥）：**永远不进镜像**，在服务器上通过 `env_file` 运行时动态加载
+> - `frontend/.env`：含 `VITE_BACKEND_HOST=localhost` 等开发值，**不能**进入 Docker 构建，已在 `.dockerignore` 排除
+> - 两个 `.env` 均在 `.dockerignore` 中排除，这是正确的安全做法
 
 ---
 

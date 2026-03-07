@@ -8,9 +8,10 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Supabase 和登录配置（构建时烧入 SPA bundle）
-ARG NUXT_PUBLIC_SUPABASE_URL=""
-ARG NUXT_PUBLIC_SUPABASE_ANON_KEY=""
+# Supabase 公开凭据（anon key 是公开客户端凭据，可安全内嵌）
+# 若切换 Supabase 项目，通过 docker-compose build args 覆盖即可
+ARG NUXT_PUBLIC_SUPABASE_URL="https://fyonyyermialezvlvamv.supabase.co"
+ARG NUXT_PUBLIC_SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ5b255eWVybWlhbGV6dmx2YW12Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzExMzg0OTksImV4cCI6MjA4NjcxNDQ5OX0.IJDwo0qbi8dsnPKSQnIMaVXy_qSPdozG3WucnWTpjSc"
 ARG NUXT_PUBLIC_AUTH_PROVIDER="both"
 
 # 传给 nuxt generate（SPA 静态生成时读取）

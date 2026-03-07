@@ -1,7 +1,6 @@
 services:
-  # 后端服务
   backend:
-    image: 192.168.6.104:5000/alalloy-agent-backend:latest
+    image: 192.168.7.102:5000/alalloy-agent-backend:latest
     build:
       context: .
       dockerfile: Dockerfile.backend
@@ -20,22 +19,22 @@ services:
     networks:
       - alalloy-network
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      test: ["CMD", "curl", "-sf", "http://localhost:8001/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
+      start_period: 60s
 
-  # 前端服务
   frontend:
-    image: 192.168.6.104:5000/alalloy-agent-frontend:latest
+    image: 192.168.7.102:5000/alalloy-agent-frontend:latest
     build:
       context: .
       dockerfile: Dockerfile.frontend
       args:
-        VITE_BACKEND_HOST: backend
-        VITE_BACKEND_PORT: "8001"
-        DEV_MODE: ${DEV_MODE:-false}
+        # Supabase 配置在构建时烧入 SPA bundle
+        NUXT_PUBLIC_SUPABASE_URL: ${SUPABASE_URL}
+        NUXT_PUBLIC_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+        NUXT_PUBLIC_AUTH_PROVIDER: ${NUXT_PUBLIC_AUTH_PROVIDER:-both}
     container_name: alalloy-frontend
     restart: always
     ports:
@@ -50,7 +49,7 @@ services:
       interval: 30s
       timeout: 3s
       retries: 3
-      start_period: 10s
+      start_period: 15s
 
 networks:
   alalloy-network:

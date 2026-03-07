@@ -3,60 +3,47 @@
 # 铝合金智能设计系统 v2.0
 # ============================================
 
-# 第一阶段: 构建环境
+# ==================== 构建阶段 ====================
 FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
-# 安装构建依赖
 RUN apt-get update && apt-get install -y --no-install-recommends gcc libpq-dev && \
     rm -rf /var/lib/apt/lists/*
 
-# 复制依赖文件（优先使用 backend/requirements.txt，降级到根目录）
 COPY requirements.txt ./requirements-root.txt
 COPY backend/requirements.txt ./requirements-backend.txt
 
-# 合并安装所有依赖
 RUN pip install --no-cache-dir --user --timeout 300 --retries 5 -r requirements-root.txt && \
     pip install --no-cache-dir --user --timeout 300 --retries 5 -r requirements-backend.txt && \
     find /root/.local -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true && \
     find /root/.local -type f -name '*.py[co]' -delete
 
-# ============================================
-# 第二阶段: 运行环境
+# ==================== 运行阶段 ====================
 FROM python:3.11-slim
 
 WORKDIR /app
 
-# 创建非 root 用户
 RUN useradd -m -u 1000 alalloy && \
-    apt-get update && apt-get install -y --no-install-recommends libpq5 && \
+    apt-get update && apt-get install -y --no-install-recommends libpq5 curl && \
     chown -R alalloy:alalloy /app && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-# 从构建阶段复制 Python 包
 COPY --from=builder /root/.local /home/alalloy/.local
 
-# 复制应用代码
 COPY --chown=alalloy:alalloy backend/app ./app
 COPY --chown=alalloy:alalloy .env.example .
 
-# 设置环境变量
 ENV PATH=/home/alalloy/.local/bin:$PATH \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     BACKEND_HOST=0.0.0.0 \
     BACKEND_PORT=8001
 
-# 切换到非 root 用户
 USER alalloy
 
-# 健康检查
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')" || exit 1
+    CMD curl -sf http://localhost:8001/health || exit 1
 
-# 暴露端口
 EXPOSE 8001
-
-# 启动命令（直接运行 uvicorn，不使用 run.py）
 CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "2"]

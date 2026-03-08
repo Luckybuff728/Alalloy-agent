@@ -42,7 +42,7 @@
     />
     
     <!-- 版本号 -->
-    <div class="version-hint">v0.1.0</div>
+    <div class="version-hint">v0.1.1</div>
   </div>
 </template>
 

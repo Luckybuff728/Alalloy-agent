@@ -26,19 +26,18 @@ load_dotenv()
 _mcp_client: Optional[MultiServerMCPClient] = None
 _mcp_tools: List[Any] = []
 
-# 铝合金场景允许的 MCP 工具（7 类计算 + 3 类查询）
+# 铝合金场景允许的 MCP 工具（6 类计算 + 3 类查询）
 ALLOWED_TOOLS = {
     # ONNX 性能预测
     "onnx_model_inference",
     "onnx_models_list",
     "onnx_get_model_config",
-    # CalphaMesh 热力学计算（7 类提交工具）
+    # CalphaMesh 热力学计算（6 类提交工具）
     "calphamesh_submit_point_task",
     "calphamesh_submit_line_task",
     "calphamesh_submit_scheil_task",
     "calphamesh_submit_binary_task",                     # 二元平衡相图
     "calphamesh_submit_ternary_task",                    # 三元等温截面
-    "calphamesh_submit_boiling_point_task",              # 沸点/熔点计算
     "calphamesh_submit_thermodynamic_properties_task",   # 热力学性质扫描
     # CalphaMesh 结果查询（3 类）
     "calphamesh_get_task_result",
@@ -54,7 +53,6 @@ CALPHAD_TOOL_NAMES = {
     "calphamesh_submit_scheil_task",
     "calphamesh_submit_binary_task",
     "calphamesh_submit_ternary_task",
-    "calphamesh_submit_boiling_point_task",
     "calphamesh_submit_thermodynamic_properties_task",
     "calphamesh_get_task_result",
     "calphamesh_get_task_status",
@@ -153,7 +151,6 @@ TOOL_DESCRIPTION_ADDONS = {
     "calphamesh_submit_scheil_task":    _AL_SUBMIT_RULES,
     "calphamesh_submit_binary_task":    _BINARY_ADDON,
     "calphamesh_submit_ternary_task":   _TERNARY_ADDON,
-    "calphamesh_submit_boiling_point_task": _TDB_SELECTION_GUIDE,
     "calphamesh_submit_thermodynamic_properties_task": _THERMO_ADDON,
 }
 

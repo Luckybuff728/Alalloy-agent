@@ -255,27 +255,43 @@ const formatJson = (data) => {
 
 // ── 工具参数摘要（显示在行头，免去展开操作）──────────────────────────────
 
-// 成分对象 → "Al-7.7Si-0.31Mg" 风格
-// 兼容：分数形式(0~1) / 百分比形式(0~100)；元素名全大写(AL/SI) → 科学格式(Al/Si)
+// 成分对象 → "Al-7Si-0.3Mg" 风格（始终以 wt% 展示）
+// 兼容：原子分数形式(0~1) / wt% 形式(0~100)；元素名全大写(AL/SI) → 科学格式(Al/Si)
 const _fmtComp = (comp) => {
   if (!comp || typeof comp !== 'object' || Array.isArray(comp)) return null
   const entries = Object.entries(comp)
-    .map(([el, v]) => [el, Number(v)])
+    .map(([el, v]) => [el.toUpperCase(), Number(v)])
     .filter(([, v]) => v > 0)
   if (!entries.length) return null
 
-  // 检测是分数(max≤1)还是百分比(max>1)
-  const maxVal = Math.max(...entries.map(([, v]) => v))
-  const scale = maxVal <= 1.0 ? 100 : 1
+  // 已知常见元素的摩尔质量（用于原子分数 → wt% 换算）
+  const MOLAR_MASS = {
+    AL: 26.98, SI: 28.09, MG: 24.31, FE: 55.85, MN: 54.94,
+    CU: 63.55, ZN: 65.38, TI: 47.87, NI: 58.69, CR: 52.00,
+    ZR: 91.22, SR: 87.62, B: 10.81,  C: 12.01,  O: 16.00,
+  }
 
-  // 元素名规范化：AL→Al, SI→Si, MG→Mg, FE→Fe, MN→Mn
+  // 元素名规范化：AL→Al, SI→Si 等
   const capEl = (s) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
 
-  // 换算为 wt% 并过滤微量（< 0.05%）
-  const pcts = entries
-    .map(([el, v]) => [capEl(el), v * scale])
-    .filter(([, pct]) => pct >= 0.05)
-    .sort((a, b) => b[1] - a[1])
+  // 检测是原子分数(max≤1)还是已经是 wt%
+  const maxVal = Math.max(...entries.map(([, v]) => v))
+  let pcts
+  if (maxVal <= 1.0) {
+    // 原子分数 → wt%：wt_i = x_i * M_i，归一化到 100%
+    const wtRaw = entries.map(([el, x]) => [el, x * (MOLAR_MASS[el] ?? 28)])
+    const wtTotal = wtRaw.reduce((s, [, w]) => s + w, 0)
+    pcts = wtRaw
+      .map(([el, w]) => [capEl(el), (w / wtTotal) * 100])
+      .filter(([, pct]) => pct >= 0.05)
+      .sort((a, b) => b[1] - a[1])
+  } else {
+    // 已是 wt%，直接使用
+    pcts = entries
+      .map(([el, v]) => [capEl(el), v])
+      .filter(([, pct]) => pct >= 0.05)
+      .sort((a, b) => b[1] - a[1])
+  }
 
   if (!pcts.length) return null
   const [[baseEl, basePct], ...rest] = pcts

@@ -7,7 +7,7 @@
 | 专家 | 职责 | 边界 |
 |---|---|---|
 | `dataExpert` | 查询历史数据库、推荐候选成分 | 不能做任何计算 |
-| `analysisExpert` | ONNX 性能预测 / CalphaMesh 热力学计算（7类）/ 查询任务状态 | 不能查数据库、不能写报告 |
+| `analysisExpert` | ONNX 性能预测 / CalphaMesh 热力学计算（6类）/ 查询任务状态 | 不能查数据库、不能写报告 |
 | `reportWriter` | 汇总已有结果生成最终设计报告 | 不能补充新数据或新计算 |
 | `__end__` | 结束本轮，等待用户下一条消息 | — |
 
@@ -18,7 +18,8 @@
 ### 规则 1：用户明确指令
 
 - "性能预测 / ONNX / 预测" → `analysisExpert`
-- "热力学 / 相图 / 凝固 / Scheil / 点计算 / 线扫描 / 二元 / 三元 / 热容 / 沸点 / 熔点 / 验证成分" → `analysisExpert`
+- "热力学 / 相图 / 凝固 / Scheil / 点计算 / 线扫描 / 二元 / 三元 / 热容 / 验证成分" → `analysisExpert`
+  > ⚠️ 即便用户未提供具体成分数值，也路由到 `analysisExpert`——该专家内部设有成分前置校验，会主动向用户收集缺失的成分信息（展示表单或询问单位），无需由 thinker 拦截。
 - "查看任务状态 / 等待结果 / 查询结果" → `analysisExpert`
 - "查历史数据 / 推荐成分 / 查数据库" → `dataExpert`
 - "生成报告 / 总结 / 最终结论 / 够了 / 结束" → `reportWriter`
@@ -31,7 +32,7 @@
 |---|---|---|
 | `performance_prediction` | `analysisExpert` | |
 | `thermodynamic_analysis` | `analysisExpert` | 执行核心三项 |
-| `deep_thermodynamic_analysis` | `analysisExpert` | 执行扩展四项（thermo_properties/binary/ternary/boiling_point 各自独立，部分未做即未做） |
+| `deep_thermodynamic_analysis` | `analysisExpert` | 执行扩展三项（thermo_properties/binary/ternary 各自独立，部分未做即未做） |
 | `retry` | 上一个专家是谁就路由回谁 | |
 | `generate_report` | `reportWriter` | |
 | `refine_composition` | `dataExpert` | 调整成分约束重新查询，清除上一轮分析结果 |
@@ -58,6 +59,8 @@
 - 且**用户在该专家回复后未发新消息**（挂件选择视为新消息）
 
 → 直接 `__end__`（专家已给出文字回复，无需重复路由，否则会无限循环）
+
+> ⚠️ **例外**：若上一轮 `analysisExpert` 的纯文字输出是"询问成分单位（wt% 或 at%？）"，属于主动等待用户补充信息的正常状态，**不触发反循环保护**——此时应等待用户回复（`__end__`），用户回复后再路由回 `analysisExpert`。
 
 ⛔ `generate_report` 工具在对话历史中**已成功调用**，**且**规则 2 未命中时，禁止再次路由到 `reportWriter`，直接 `__end__`。
 

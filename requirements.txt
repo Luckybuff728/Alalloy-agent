@@ -9,7 +9,7 @@ langchain-core>=0.3.0         # LangChain 核心类型
 langchain-openai>=0.3.0       # OpenAI 兼容接口（DashScope 百炼 API）
 langgraph>=1.0.0              # 工作流编排（StateGraph, stream_mode）
 langgraph-checkpoint>=2.0.0   # Checkpointer 基础
-langchain-mcp-adapters        # MCP 工具适配器（ONNX + Calphad）
+langchain-mcp-adapters==0.1.14  # MCP 工具适配器（ONNX + Calphad）
 
 # Web 框架
 fastapi>=0.115.0              # Web API 框架

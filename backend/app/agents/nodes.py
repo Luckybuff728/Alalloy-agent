@@ -167,7 +167,7 @@ def build_expert_agents(
     context_editing_mw = ContextEditingMiddleware(
         edits=[
             ClearToolUsesEdit(
-                trigger=500000,   # token 数超过 20000 时触发清理
+                trigger=100000,   # token 数超过 20000 时触发清理
                 keep=10,          # 保留最近 5 条工具结果
                 clear_tool_inputs=False,
                 placeholder="[已清除，结果已在前文汇总]",
@@ -190,13 +190,13 @@ def build_expert_agents(
         name="dataExpert",
     )
 
-    # --- analysisExpert（HITL 仅用于耗时较长的 CalphaMesh 提交工具）---
-    # 只对分钟级的任务要求用户确认参数，秒级任务直接执行：
-    #   保留 HITL：scheil（多步凝固）、binary（二元相图）、ternary（三元截面）
-    #   去掉 HITL：point（单点，秒级）、line（温度扫描，秒级-1min）、
-    #             boiling_point（单点，秒级）、thermo_properties（性质扫描，中速）
+    # --- analysisExpert（HITL 用于性能预测和所有主要 CalphaMesh 提交工具）---
+    # 对 ONNX 性能预测及所有热力学提交任务均要求用户确认成分/参数后再执行。
     # HITL 将同一 AIMessage 内的所有拦截工具合并为一次 interrupt（一个确认框）。
     calphad_hitl = calphad_hitl_tools or {
+        "onnx_model_inference":           True,
+        "calphamesh_submit_point_task":   True,
+        "calphamesh_submit_line_task":    True,
         "calphamesh_submit_scheil_task":  True,
         "calphamesh_submit_binary_task":  True,
         "calphamesh_submit_ternary_task": True,
@@ -209,7 +209,7 @@ def build_expert_agents(
             HumanInTheLoopMiddleware(interrupt_on=calphad_hitl),
             tool_retry_mw,
             model_retry_mw,
-            ModelCallLimitMiddleware(run_limit=30, exit_behavior="end"),  # 7 类工具步数更多
+            ModelCallLimitMiddleware(run_limit=30, exit_behavior="end"),  # ONNX+6 类热力学工具步数更多
             context_editing_mw,
         ],
         name="analysisExpert",

@@ -65,20 +65,27 @@ def build_graph(
     )
 
     # ==================== 构建 create_agent 子图 ====================
-    # 只对耗时较长的 CalphaMesh 任务开启 HITL（秒级的快速任务直接执行，不打断用户）：
-    #   保留 HITL：scheil（多步凝固，分钟级）、binary（二元相图，分钟级）、ternary（三元截面，最长）
-    #   去掉 HITL：point（单点，秒级）、line（温度扫描，秒级-1min）、
-    #             boiling_point（单点，秒级）、thermo_properties（性质扫描，中速）
-    LONG_RUNNING_SUBMIT_TOOLS = {
+    # 对 ONNX 性能预测及所有主要 CalphaMesh 提交任务开启 HITL，执行前要求用户确认参数：
+    #   ONNX HITL：onnx_model_inference（确认成分输入）
+    #   CalphaMesh HITL：point / line / scheil / binary / ternary
+    #   不拦截：thermo_properties（性质扫描，后台执行）
+    CALPHAD_HITL_TOOLS = {
+        "calphamesh_submit_point_task",
+        "calphamesh_submit_line_task",
         "calphamesh_submit_scheil_task",
         "calphamesh_submit_binary_task",
         "calphamesh_submit_ternary_task",
     }
     calphad_submit_names = [
         t.name for t in calphad_tools
-        if "submit" in t.name and t.name in LONG_RUNNING_SUBMIT_TOOLS
+        if "submit" in t.name and t.name in CALPHAD_HITL_TOOLS
     ] if calphad_tools else []
-    hitl_config = {name: True for name in calphad_submit_names} if calphad_submit_names else None
+    onnx_hitl_names = [
+        t.name for t in onnx_tools
+        if t.name == "onnx_model_inference"
+    ] if onnx_tools else []
+    all_hitl_names = calphad_submit_names + onnx_hitl_names
+    hitl_config = {name: True for name in all_hitl_names} if all_hitl_names else None
 
     dataExpert_agent, analysisExpert_agent, reportWriter_agent = build_expert_agents(
         data_expert_tools=data_expert_tools,

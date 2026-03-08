@@ -46,7 +46,7 @@ const TOOL_REGISTRY = {
   // ==================== 预测类 ====================
   // 旧工具名称（兼容）
   'predict_onnx_performance': {
-    displayName: 'ONNX 性能预测',
+    displayName: '性能预测',
     category: ToolCategory.PREDICTION,
     resultDisplay: ResultDisplay.CARD,
     chartComponent: 'PerformanceCard',
@@ -54,14 +54,14 @@ const TOOL_REGISTRY = {
   },
   // MCP 原生工具名称
   'onnx_model_inference': {
-    displayName: 'ONNX 性能预测',
+    displayName: '性能预测',
     category: ToolCategory.PREDICTION,
     resultDisplay: ResultDisplay.CARD,
     chartComponent: 'PerformanceCard',
     description: '基于 ONNX 模型预测铝合金力学性能（MCP）',
   },
   'onnx_models_list': {
-    displayName: 'ONNX 模型列表',
+    displayName: '模型列表',
     category: ToolCategory.PREDICTION,
     resultDisplay: ResultDisplay.NONE,
     description: '查询可用的 ONNX 预测模型列表（过程工具，不展示结果卡片）',

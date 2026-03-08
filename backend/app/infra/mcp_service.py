@@ -26,14 +26,21 @@ load_dotenv()
 _mcp_client: Optional[MultiServerMCPClient] = None
 _mcp_tools: List[Any] = []
 
-# 铝合金场景允许的 MCP 工具
+# 铝合金场景允许的 MCP 工具（7 类计算 + 3 类查询）
 ALLOWED_TOOLS = {
+    # ONNX 性能预测
     "onnx_model_inference",
     "onnx_models_list",
-    "onnx_get_model_config",  # 查询模型输入参数格式
+    "onnx_get_model_config",
+    # CalphaMesh 热力学计算（7 类提交工具）
     "calphamesh_submit_point_task",
     "calphamesh_submit_line_task",
     "calphamesh_submit_scheil_task",
+    "calphamesh_submit_binary_task",                     # 二元平衡相图
+    "calphamesh_submit_ternary_task",                    # 三元等温截面
+    "calphamesh_submit_boiling_point_task",              # 沸点/熔点计算
+    "calphamesh_submit_thermodynamic_properties_task",   # 热力学性质扫描
+    # CalphaMesh 结果查询（3 类）
     "calphamesh_get_task_result",
     "calphamesh_get_task_status",
     "calphamesh_list_tasks",
@@ -42,8 +49,14 @@ ALLOWED_TOOLS = {
 # 工具角色分类
 ONNX_TOOL_NAMES = {"onnx_model_inference", "onnx_models_list", "onnx_get_model_config"}
 CALPHAD_TOOL_NAMES = {
-    "calphamesh_submit_point_task", "calphamesh_submit_line_task",
-    "calphamesh_submit_scheil_task", "calphamesh_get_task_result",
+    "calphamesh_submit_point_task",
+    "calphamesh_submit_line_task",
+    "calphamesh_submit_scheil_task",
+    "calphamesh_submit_binary_task",
+    "calphamesh_submit_ternary_task",
+    "calphamesh_submit_boiling_point_task",
+    "calphamesh_submit_thermodynamic_properties_task",
+    "calphamesh_get_task_result",
     "calphamesh_get_task_status",
     "calphamesh_list_tasks",
 }
@@ -59,8 +72,12 @@ TOOL_DESCRIPTIONS = {
 
     "onnx_model_inference": """执行 ONNX 模型推理预测铝合金性能。
 
+【重要】只允许使用以下一个模型，禁止使用其他模型：
+- 压铸成形性能预测模型 UUID: 9fa6d60e-55ea-4035-96f2-6f9cfa1a9696（唯一可用）
+- T6热处理模型 UUID: 1a4b3b66-bf2d-45a6-bbea-ef1486b6812d ← 禁止使用，系统未集成 T6 工艺参数
+
 参数：
-- uuid: 模型UUID（推荐: 9fa6d60e-55ea-4035-96f2-6f9cfa1a9696）
+- uuid: 固定使用 "9fa6d60e-55ea-4035-96f2-6f9cfa1a9696"
 - inputs: 质量百分比字典，格式 W(元素名)，需包含全部 15 种元素（缺失设 0）
 
 示例（Al-7Si-0.3Mg）：
@@ -73,29 +90,71 @@ TOOL_DESCRIPTIONS = {
 }
 
 # CalphaMesh submit 工具：追加到服务端描述之后（不替换）
-# 仅补充服务端 schema 无法表达的业务语义——TDB 支持元素完整列表及过滤归一化规则
+# 补充服务端 schema 无法完整表达的业务语义：TDB 选择策略和归一化规则
 
-# 各 TDB 支持元素完整列表（过滤时严格按此执行，列表之外的元素一律不加入）
-_TDB_ELEMENT_LISTS = (
-    "\n\n[TDB 支持元素完整列表]"
-    "\n  • FE-C-SI-MN-CU-TI-O.TDB   → 仅支持：FE、C、SI、MN、CU、TI、O（共 7 种）"
-    "\n  • B-C-SI-ZR-HF-LA-Y-TI-O.TDB → 仅支持：B、C、SI、ZR、HF、LA、Y、TI、O（共 9 种）"
-    "\n  （AL、MG、SR、NI、CR 等铝合金常见元素均不在任何可用 TDB 中）"
+# ── TDB 选择策略（注入所有 7 类 submit 工具）──────────────────────────────
+_TDB_SELECTION_GUIDE = (
+    "\n\n[TDB 选择策略]"
+    "\n  铝合金场景（含 AL/SI/MG/FE/MN）→ 优先使用 Al-Si-Mg-Fe-Mn_by_wf.TDB"
+    "\n    支持元素：AL、SI、MG、FE、MN（5 种，含铝基体）"
+    "\n    适用任务：压铸铝合金 Al-Si-Mg 系的所有计算"
+    "\n  铁基合金（主体为 FE）→ FE-C-SI-MN-CU-TI-O.TDB（FE/C/SI/MN/CU/TI/O）"
+    "\n  硼化物/难熔金属 → B-C-SI-ZR-HF-LA-Y-TI-O.TDB（B/C/SI/ZR/HF/LA/Y/TI/O）"
 )
 
-CALPHAMESH_SUBMIT_RULES = (
-    _TDB_ELEMENT_LISTS
-    + "\n\n调用前必须完成以下三步，否则服务端会直接拒绝："
-    "\n  1. 对照上述支持列表，将 composition 中不在列表内的元素全部剔除（不得替代）。"
-    "\n  2. 对保留元素重新归一化：f_i = n_i / Σn_j；最后将最大分量设为 1.0 - Σ(其余元素 f_j)，"
-    "使总和严格等于 1.0。"
-    "\n  3. 用过滤后的 components 和归一化后的 composition 提交，结果标注为受支持元素子系统趋势分析。"
+# ── 归一化规则（含不支持元素时必须执行，适用于所有 TDB）─────────────────────
+_NORMALIZATION_RULE = (
+    "\n\n[元素过滤与归一化（含不支持元素时必须执行）]"
+    "\n  Al TDB 仅支持 AL/SI/MG/FE/MN，须剔除 Cu/Zn/Sr/Ti/Cr/Ni 等元素后重归一化："
+    "\n  1. n_i = wt%_i / M_i（摩尔质量：AL=26.98, SI=28.09, MG=24.31, FE=55.85, MN=54.94）"
+    "\n  2. N_total = Σn_i（仅保留元素）"
+    "\n  3. 非 AL 元素：f_i = n_i / N_total（保留 6 位小数）"
+    "\n  4. AL 必须用补数法：f_AL = 1.0 - Σ(其余 f_i)，禁止独立计算 AL 后直接相加"
+    "\n  5. 提交前确认 Σ(所有 f_i) == 1.0，不允许 0.9999 或 1.0001"
+    "\n  结果需标注为 Al-Si-Mg-Fe-Mn 子系统趋势分析"
+)
+
+# ── 各 submit 工具的描述追加内容 ─────────────────────────────────────────
+_AL_SUBMIT_RULES = _TDB_SELECTION_GUIDE + _NORMALIZATION_RULE
+
+# Binary 专用提示（顶点成分约束）
+_BINARY_ADDON = (
+    _TDB_SELECTION_GUIDE
+    + "\n\n[Al-Si 二元相图推荐配置]"
+    "\n  components=[\"AL\",\"SI\"], tdb_file=\"Al-Si-Mg-Fe-Mn_by_wf.TDB\""
+    "\n  start_composition={\"AL\":1.0,\"SI\":0.0}  ← 纯铝端"
+    "\n  end_composition={\"AL\":0.7,\"SI\":0.3}    ← 30 mol% Si 端（覆盖全部常用牌号）"
+    "\n  start_temperature=500.0, end_temperature=1200.0"
+)
+
+# Ternary 专用提示（三顶点约束）
+_TERNARY_ADDON = (
+    _TDB_SELECTION_GUIDE
+    + "\n\n[Al-Mg-Si 三元截面推荐配置]"
+    "\n  components=[\"AL\",\"MG\",\"SI\"], temperature=773.0（时效温度 500°C）"
+    "\n  composition_y={\"AL\":1.0,\"MG\":0.0,\"SI\":0.0}（纯 Al 顶点）"
+    "\n  composition_x={\"AL\":0.0,\"MG\":1.0,\"SI\":0.0}（纯 Mg 顶点）"
+    "\n  composition_o={\"AL\":0.0,\"MG\":0.0,\"SI\":1.0}（纯 Si 顶点）"
+    "\n  三顶点各自总和须等于 1.0，不可重复"
+)
+
+# ThermoProperties 专用提示（压力参数说明）
+_THERMO_ADDON = (
+    _TDB_SELECTION_GUIDE
+    + "\n\n[压力参数重要说明]"
+    "\n  pressure_start / pressure_end 是 log10(P/Pa)，不是直接 Pa 值"
+    "\n  常压（约 1 atm）= 5（即 10^5 Pa = 100000 Pa）"
+    "\n  常压分析时：pressure_start=5.0, pressure_end=5.0, pressure_increments=2"
 )
 
 TOOL_DESCRIPTION_ADDONS = {
-    "calphamesh_submit_point_task": CALPHAMESH_SUBMIT_RULES,
-    "calphamesh_submit_scheil_task": CALPHAMESH_SUBMIT_RULES,
-    "calphamesh_submit_line_task": CALPHAMESH_SUBMIT_RULES,
+    "calphamesh_submit_point_task":     _AL_SUBMIT_RULES,
+    "calphamesh_submit_line_task":      _AL_SUBMIT_RULES,
+    "calphamesh_submit_scheil_task":    _AL_SUBMIT_RULES,
+    "calphamesh_submit_binary_task":    _BINARY_ADDON,
+    "calphamesh_submit_ternary_task":   _TERNARY_ADDON,
+    "calphamesh_submit_boiling_point_task": _TDB_SELECTION_GUIDE,
+    "calphamesh_submit_thermodynamic_properties_task": _THERMO_ADDON,
 }
 
 

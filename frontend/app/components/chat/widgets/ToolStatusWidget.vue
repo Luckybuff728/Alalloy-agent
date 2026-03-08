@@ -1,19 +1,36 @@
 <template>
   <div class="tool-status-widget" :class="{ 'inline-mode': inline }">
-    <div v-for="tool in tools" :key="tool.name" class="tool-card" :class="toolBlockClass(tool)">
+
+    <!-- 批量错误 + HITL 确认并存提示：让用户明白可以直接确认，AI 会自动修复失败的工具 -->
+    <div
+      v-if="pausedTools.length > 0 && errorTools.length > 0"
+      class="batch-mixed-warning"
+    >
+      <el-icon color="#e6a23c" style="flex-shrink:0"><WarningFilled /></el-icon>
+      <span>
+        批次中有 <strong>{{ errorTools.length }}</strong> 个工具执行失败（参数错误）。
+        点击"确认执行"后，AI 将自动分析失败原因并重新提交修正参数。
+      </span>
+    </div>
+
+    <div v-for="tool in tools" :key="toolKey(tool)" class="tool-card" :class="toolBlockClass(tool)">
       
       <!-- 1. Header: 名字与状态 -->
-      <div class="tool-header" @click="toggleExpand(tool.name)">
+      <div class="tool-header" @click="toggleExpand(toolKey(tool))">
         <div class="header-left">
-          <!-- isBuilding: LLM 正在流式构建工具参数 -->
+          <!-- 左侧状态图标：hasError / isCancelled 优先于 isRunning，避免矛盾显示 -->
           <span class="status-icon building" v-if="tool.isBuilding">
             <span class="spinner"></span>
           </span>
-          <span class="status-icon" v-else-if="tool.isRunning">
-            <span class="spinner"></span>
-          </span>
+          <!-- ★ hasError 在 isRunning 之前：防止出现"蓝色加载圈 + 执行失败"的矛盾状态 -->
           <span class="status-icon error" v-else-if="tool.hasError">
             <el-icon><CircleClose /></el-icon>
+          </span>
+          <span class="status-icon cancelled" v-else-if="tool.isCancelled || isLocallyCancelled(tool)">
+            <el-icon><Close /></el-icon>
+          </span>
+          <span class="status-icon" v-else-if="tool.isRunning">
+            <span class="spinner"></span>
           </span>
           <span class="status-icon confirmed" v-else-if="isLocallyConfirmed(tool)">
             <el-icon><Check /></el-icon>
@@ -21,15 +38,13 @@
           <span class="status-icon paused" v-else-if="tool.isPaused">
             <el-icon><SemiSelect /></el-icon>
           </span>
-          <span class="status-icon cancelled" v-else-if="tool.isCancelled || isLocallyCancelled(tool)">
-            <el-icon><Close /></el-icon>
-          </span>
           <span class="status-icon success" v-else>
             <el-icon><Check /></el-icon>
           </span>
           <span class="tool-name">{{ getToolDisplayName(tool.name) }}</span>
+          <span class="tool-subtitle" v-if="getToolSubtitle(tool)">{{ getToolSubtitle(tool) }}</span>
           <span class="expand-icon" v-if="!tool.isRunning && !tool.isBuilding">
-            <el-icon v-if="expandedTools[tool.name]"><CaretBottom /></el-icon>
+            <el-icon v-if="expandedTools[toolKey(tool)]"><CaretBottom /></el-icon>
             <el-icon v-else><CaretRight /></el-icon>
           </span>
         </div>
@@ -46,9 +61,17 @@
         <span class="time-tag" v-else>执行中...</span>
       </div>
 
-      <!-- 2. Body: 展开后显示确认卡片或参数详情 -->
+      <!-- 2a. 建参流式显示：独立于 expandedTools，isBuilding=false 时立即消失 -->
       <transition name="fade">
-        <div class="tool-body" v-if="!tool.isRunning && expandedTools[tool.name]">
+        <div class="tool-building-body" v-if="tool.isBuilding && tool.inputJson">
+          <div class="json-label">构建参数中 (Arguments):</div>
+          <pre class="json-content">{{ tool.inputJson }}</pre>
+        </div>
+      </transition>
+
+      <!-- 2b. 非建参 Body：由 expandedTools 控制（HITL确认 / 参数查看 / 错误详情） -->
+      <transition name="fade">
+        <div class="tool-body" v-if="!tool.isBuilding && !tool.isRunning && expandedTools[toolKey(tool)]">
           <!-- 暂停时 + 未本地决策: 嵌入确认卡片 -->
           <ToolConfirmWidget
             v-if="tool.isPaused && tool.interruptPayload && !isLocallyDecided(tool)"
@@ -68,18 +91,19 @@
             <div class="error-header">
               <el-icon color="#f56c6c"><WarningFilled /></el-icon>
               <span>工具执行失败</span>
+              <span
+                v-if="tool.errorMessage.length > 160"
+                class="error-toggle"
+                @click.stop="expandedErrors[toolKey(tool)] = !expandedErrors[toolKey(tool)]"
+              >{{ expandedErrors[toolKey(tool)] ? '收起' : '查看详情' }}</span>
             </div>
-            <div class="error-message">{{ tool.errorMessage }}</div>
+            <div class="error-message">
+              {{ expandedErrors[toolKey(tool)] ? tool.errorMessage : truncateErrorMsg(tool.errorMessage) }}
+            </div>
           </div>
           <!-- 非暂停时: 参数/结果 JSON -->
           <div class="json-box" v-if="!tool.isPaused && !tool.hasError">
-            <!-- 构建状态: 显示流式 JSON 字符串 -->
-            <div class="json-section" v-if="tool.isBuilding && tool.inputJson">
-              <div class="json-label">构建参数中 (Arguments):</div>
-              <pre class="json-content">{{ tool.inputJson }}</pre>
-            </div>
-            <!-- 正常状态: 显示解析后的输入 -->
-            <div class="json-section" v-else-if="tool.input && Object.keys(tool.input).length > 0">
+            <div class="json-section" v-if="tool.input && Object.keys(tool.input).length > 0">
               <div class="json-label">Arguments (Input):</div>
               <pre class="json-content">{{ formatJson(tool.input) }}</pre>
             </div>
@@ -121,14 +145,30 @@ const props = defineProps({
 const emit = defineEmits(['confirm-tool', 'cancel-tool'])
 
 const expandedTools = reactive({})
-const autoExpandedTools = new Set()
 const localDecisions = reactive({})
 
 const pausedTools = computed(() => props.tools.filter(t => t.isPaused))
+const errorTools  = computed(() => props.tools.filter(t => t.hasError))
 
-const isLocallyConfirmed = (tool) => !!localDecisions[tool.name]?.confirmed
-const isLocallyCancelled = (tool) => !!localDecisions[tool.name]?.cancelled
-const isLocallyDecided = (tool) => !!localDecisions[tool.name]
+// 截断过长的错误消息并去掉常见冗余前缀
+const truncateErrorMsg = (msg, maxLen = 160) => {
+  if (!msg) return ''
+  const cleaned = msg
+    .replace(/^工具调用失败\s*\([^)]*\):\s*/i, '')
+    .replace(/^Tool execution failed:\s*/i, '')
+    .replace(/^McpError:\s*/i, '')
+    .trim()
+  return cleaned.length > maxLen ? cleaned.slice(0, maxLen) + ' …' : cleaned
+}
+const expandedErrors = reactive({})
+
+// ★ 修复：使用 tool_call_id（block.id）作为唯一 key，避免同名工具多次调用时 key 碰撞
+//   （LLM 可能并行调用两次 calphamesh_submit_scheil_task，name 相同但 id 不同）
+const toolKey = (tool) => tool.id || tool.name
+
+const isLocallyConfirmed = (tool) => !!localDecisions[toolKey(tool)]?.confirmed
+const isLocallyCancelled = (tool) => !!localDecisions[toolKey(tool)]?.cancelled
+const isLocallyDecided = (tool) => !!localDecisions[toolKey(tool)]
 
 const toolBlockClass = (tool) => ({
   'is-building': tool.isBuilding,
@@ -140,56 +180,59 @@ const toolBlockClass = (tool) => ({
 })
 
 const onToolConfirm = (tool, event) => {
-  localDecisions[tool.name] = { confirmed: true, decisions: event.decisions || [] }
-  expandedTools[tool.name] = false
-  autoExpandedTools.delete(tool.name)
+  localDecisions[toolKey(tool)] = { confirmed: true, decisions: event.decisions || [] }
+  expandedTools[toolKey(tool)] = false
   checkBatchComplete()
 }
 
 const onToolCancel = (tool, event) => {
-  localDecisions[tool.name] = { cancelled: true, decisions: event.decisions || [] }
-  expandedTools[tool.name] = false
-  autoExpandedTools.delete(tool.name)
+  localDecisions[toolKey(tool)] = { cancelled: true, decisions: event.decisions || [] }
+  expandedTools[toolKey(tool)] = false
   checkBatchComplete()
 }
 
 const checkBatchComplete = () => {
   if (pausedTools.value.length === 0) return
-  const allDecided = pausedTools.value.every(t => localDecisions[t.name])
+  const allDecided = pausedTools.value.every(t => localDecisions[toolKey(t)])
   if (!allDecided) return
 
-  const decisionByTool = {}
+  const decisionByTool = {}  // name → decision（兜底兼容旧后端）
+  const decisionById = {}    // toolCallId → { name, decision }（精确追踪，优先使用）
   let allCancelled = true
   for (const t of pausedTools.value) {
-    const d = localDecisions[t.name]
-    decisionByTool[t.name] = d?.decisions?.[0] ?? (d?.cancelled ? { type: 'reject' } : { type: 'approve' })
+    const d = localDecisions[toolKey(t)]
+    const decision = d?.decisions?.[0] ?? (d?.cancelled ? { type: 'reject' } : { type: 'approve' })
+    decisionByTool[t.name] = decision
+    // toolKey(t) = t.id（tool_call_id）|| t.name，优先用 id 精确追踪
+    decisionById[toolKey(t)] = { name: t.name, decision }
     if (!d?.cancelled) allCancelled = false
   }
 
   if (allCancelled) {
-    emit('cancel-tool', { cancelled: true, decisionByTool })
+    emit('cancel-tool', { cancelled: true, decisionByTool, decisionById })
   } else {
-    emit('confirm-tool', { confirmed: true, decisionByTool })
+    emit('confirm-tool', { confirmed: true, decisionByTool, decisionById })
   }
 }
 
 watch(() => props.tools, (tools) => {
   for (const t of tools) {
-    if (t.isBuilding && !expandedTools[t.name]) {
-      expandedTools[t.name] = true
-      autoExpandedTools.add(t.name)
-    } else if (t.isPaused && t.interruptPayload && !expandedTools[t.name] && !localDecisions[t.name]) {
-      expandedTools[t.name] = true
-      autoExpandedTools.add(t.name)
-    } else if (!t.isPaused && !t.isBuilding && autoExpandedTools.has(t.name)) {
-      expandedTools[t.name] = false
-      autoExpandedTools.delete(t.name)
+    const k = toolKey(t)
+
+    // 建参中：跳过（建参 JSON 已通过独立的 v-if="tool.isBuilding" 显示，无需 expandedTools）
+    if (t.isBuilding) continue
+
+    // HITL 等待确认：自动展开确认卡片
+    if (t.isPaused && t.interruptPayload && !isLocallyDecided(t) && !expandedTools[k]) {
+      expandedTools[k] = true
     }
   }
-  for (const name in localDecisions) {
-    const tool = tools.find(t => t.name === name)
+
+  // 清理已不再 paused 的 localDecisions
+  for (const key in localDecisions) {
+    const tool = tools.find(t => toolKey(t) === key)
     if (!tool || !tool.isPaused) {
-      delete localDecisions[name]
+      delete localDecisions[key]
     }
   }
 }, { deep: true, immediate: true })
@@ -209,9 +252,168 @@ const formatJson = (data) => {
   }
   return JSON.stringify(data, null, 2)
 }
+
+// ── 工具参数摘要（显示在行头，免去展开操作）──────────────────────────────
+
+// 成分对象 → "Al-7.7Si-0.31Mg" 风格
+// 兼容：分数形式(0~1) / 百分比形式(0~100)；元素名全大写(AL/SI) → 科学格式(Al/Si)
+const _fmtComp = (comp) => {
+  if (!comp || typeof comp !== 'object' || Array.isArray(comp)) return null
+  const entries = Object.entries(comp)
+    .map(([el, v]) => [el, Number(v)])
+    .filter(([, v]) => v > 0)
+  if (!entries.length) return null
+
+  // 检测是分数(max≤1)还是百分比(max>1)
+  const maxVal = Math.max(...entries.map(([, v]) => v))
+  const scale = maxVal <= 1.0 ? 100 : 1
+
+  // 元素名规范化：AL→Al, SI→Si, MG→Mg, FE→Fe, MN→Mn
+  const capEl = (s) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
+
+  // 换算为 wt% 并过滤微量（< 0.05%）
+  const pcts = entries
+    .map(([el, v]) => [capEl(el), v * scale])
+    .filter(([, pct]) => pct >= 0.05)
+    .sort((a, b) => b[1] - a[1])
+
+  if (!pcts.length) return null
+  const [[baseEl, basePct], ...rest] = pcts
+
+  const fmtNum = (pct) => {
+    if (pct >= 10) return Math.round(pct).toString()
+    if (pct >= 1)  return parseFloat(pct.toFixed(1)).toString()
+    return parseFloat(pct.toFixed(2)).toString()
+  }
+
+  const parts = [
+    basePct > 50 ? baseEl : `${fmtNum(basePct)}${baseEl}`,
+    ...rest.map(([el, pct]) => `${fmtNum(pct)}${el}`),
+  ]
+  return parts.join('-')
+}
+
+// 元素数组 → "Al-Si-Mg" 系统名（用于二元/三元/line 任务）
+const _compSystem = (components) => {
+  if (!Array.isArray(components) || !components.length) return null
+  return components
+    .map(s => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase())
+    .join('-')
+}
+
+// 温度范围：兼容所有已知字段名变体
+const _getTemp = (input) => {
+  const s = input.start_temp ?? input.start_temperature ?? input.temperature_start
+  const e = input.end_temp   ?? input.end_temperature   ?? input.temperature_end
+  const t = input.temperature
+  const range = input.temperature_range // [800, 4000]
+  if (s != null && e != null) return `${s}~${e} K`
+  if (t != null) return `${t} K`
+  if (Array.isArray(range) && range.length >= 2) return `${range[0]}~${range[1]} K`
+  return null
+}
+
+const getToolSubtitle = (tool) => {
+  const input = tool.input
+  if (!input || typeof input !== 'object') return null
+  const name = tool.name
+
+  // ── 温度扫描：固定成分 line scan ──
+  // 成分在 composition / compositions_start；温度在 temperature_start/end
+  if (name === 'calphamesh_submit_line_task') {
+    const comp = _fmtComp(input.composition || input.start_composition || input.compositions_start)
+               || _compSystem(input.components)
+    const t = _getTemp(input)
+    return [comp, t].filter(Boolean).join(' · ') || null
+  }
+
+  // ── 含 composition 对象的单点/Scheil/热力学 ──
+  if (['calphamesh_submit_scheil_task',
+       'calphamesh_submit_point_task',
+       'calphamesh_submit_thermodynamic_properties_task'].includes(name)) {
+    const comp = _fmtComp(input.composition || input.start_composition || input.compositions_start)
+               || _compSystem(input.components)
+    const t = _getTemp(input)
+    return [comp, t].filter(Boolean).join(' · ') || null
+  }
+
+  // ── 二元相图：components: ["AL","SI"] ──
+  if (name === 'calphamesh_submit_binary_task') {
+    const sys = _compSystem(input.components)
+             || [input.component1, input.component2].filter(Boolean).join('-')
+    const t = _getTemp(input)
+    return [sys, t].filter(Boolean).join(' · ') || null
+  }
+
+  // ── 三元截面：components: ["AL","MG","SI"] ──
+  if (name === 'calphamesh_submit_ternary_task') {
+    const sys = _compSystem(input.components)
+             || [input.component1, input.component2, input.component3].filter(Boolean).join('-')
+    const t = _getTemp(input)
+    return [sys, t].filter(Boolean).join(' · ') || null
+  }
+
+  // ── 熔点/沸点：compositions / composition 对象，或 components 数组 ──
+  if (name === 'calphamesh_submit_boiling_point_task') {
+    // 优先成分对象（区分合金与纯元素）
+    const comp = _fmtComp(input.compositions || input.composition)
+               || _compSystem(input.components)
+    return comp || null
+  }
+
+  // ── 获取任务结果/状态 ──
+  if (['calphamesh_get_task_result', 'calphamesh_get_task_status'].includes(name)) {
+    return input.task_id != null ? `#${input.task_id}` : null
+  }
+
+  // ── 知识库 / iDME 查询 ──
+  if (['query_idme', 'query_knowledge_base'].includes(name)) {
+    const q = input.query || input.text || input.keyword || ''
+    return q ? (q.length > 28 ? q.slice(0, 28) + '…' : q) : null
+  }
+
+  // ── ONNX / ML 预测 ──
+  if (['onnx_model_inference', 'predict_ml_performance_tool', 'predict_onnx_performance'].includes(name)) {
+    return _fmtComp(input.composition || input.alloy_composition)
+  }
+
+  // ── 成分校验/归一化 ──
+  if (['validate_composition_tool', 'normalize_composition_tool'].includes(name)) {
+    return _fmtComp(input.composition)
+  }
+
+  return null
+}
 </script>
 
 <style scoped>
+/* ── 批量错误 + HITL 并存提示横幅 ─────────────────── */
+.batch-mixed-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 8px 12px;
+  background: #fdf6ec;
+  border: 1px solid #f5dab1;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #906000;
+  line-height: 1.5;
+}
+
+/* ── 错误展开/收起 ────────────────────────────────── */
+.error-toggle {
+  margin-left: auto;
+  font-size: 11px;
+  color: #909399;
+  cursor: pointer;
+  text-decoration: underline;
+  flex-shrink: 0;
+}
+.error-toggle:hover {
+  color: #f56c6c;
+}
+
 .tool-status-widget {
   margin: 8px 0;
   display: flex;
@@ -286,11 +488,30 @@ const formatJson = (data) => {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+  flex: 1;
 }
 
 .tool-name {
   font-weight: 500;
   color: #a1a1aa;
+}
+
+/* ── 参数摘要：工具名后面的小字，快速区分同类工具 ── */
+.tool-subtitle {
+  font-size: 11px;
+  color: #52525b;
+  font-weight: 400;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 1;
+  padding: 1px 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 3px;
+  line-height: 1.4;
 }
 
 .expand-icon {
@@ -367,6 +588,12 @@ const formatJson = (data) => {
 @keyframes pulse {
   0%   { transform: scale(1); opacity: 0.8; }
   100% { transform: scale(3); opacity: 0; }
+}
+
+/* ── 建参流式区域（独立，isBuilding=false 时自动消失）── */
+.tool-building-body {
+  margin-top: 6px;
+  padding: 0;
 }
 
 /* ── 展开区域 ── */

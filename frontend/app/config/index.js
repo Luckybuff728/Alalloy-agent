@@ -246,6 +246,31 @@ const RESULT_TYPES = {
     title: '知识检索',
     icon: 'SearchOutline',
     color: '#6366f1'
+  },
+  'alloy_design_report': {
+    title: '设计可行性报告',
+    icon: 'DocumentTextOutline',
+    color: '#1967d2'
+  },
+  'binary_phase': {
+    title: '二元平衡相图',
+    icon: 'StatsChartOutline',
+    color: '#0ea5e9'
+  },
+  'ternary_phase': {
+    title: '三元等温截面',
+    icon: 'TriangleOutline',
+    color: '#8b5cf6'
+  },
+  'boiling_point': {
+    title: '熔点/沸点计算',
+    icon: 'ThermometerOutline',
+    color: '#f97316'
+  },
+  'thermo_properties': {
+    title: '热力学性质曲线',
+    icon: 'TrendingUpOutline',
+    color: '#14b8a6'
   }
 }
 

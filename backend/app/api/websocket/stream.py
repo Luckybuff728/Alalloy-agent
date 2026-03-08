@@ -81,6 +81,10 @@ async def stream_graph_events(
         last_node = None
         current_parent_node = None
         interrupt_yielded = False
+        # ★ 记录 tc_index → tc_id 的映射
+        # LangGraph 流式时，工具调用 chunk 只有第一片（携带 name）才有 id，
+        # 后续参数 chunk 的 id 为 null/空，需从 index 反查，确保前端能按 ID 匹配工具块。
+        tool_call_id_by_index: dict = {}
 
         async for event in graph.astream(
             input_data,
@@ -127,16 +131,22 @@ async def stream_graph_events(
                         if isinstance(tc, dict):
                             tool_name = tc.get("name")
                             tool_args = tc.get("args")
-                            tc_id = tc.get("id", "")
-                            tc_index = tc.get("index", 0)
+                            tc_id = tc.get("id") or ""
+                            tc_index = tc.get("index", 0) or 0
                         else:
                             tool_name = getattr(tc, "name", None)
                             tool_args = getattr(tc, "args", None)
-                            tc_id = getattr(tc, "id", "") or ""
+                            tc_id = getattr(tc, "id", None) or ""
                             tc_index = getattr(tc, "index", 0) or 0
 
+                        # ★ 维护 index→id 映射：首片 chunk 有 id，后续 chunk 从映射中恢复
+                        if tc_id:
+                            tool_call_id_by_index[tc_index] = tc_id
+                        elif tc_index in tool_call_id_by_index:
+                            tc_id = tool_call_id_by_index[tc_index]
+
                         if tool_name:
-                            logger.info(f"发送 tool_call_start: {tool_name}")
+                            logger.info(f"发送 tool_call_start: {tool_name} id={tc_id}")
                             yield {"type": "tool_call_start", "tool": tool_name, "id": tc_id, "agent": display_name}
                         if tool_args:
                             yield {"type": "tool_call_args", "args": tool_args, "id": tc_id, "index": tc_index, "agent": display_name}
@@ -147,16 +157,11 @@ async def stream_graph_events(
                     continue
 
                 # __interrupt__ 检测（子图和父图均检测，仅首次触发）
-                if "__interrupt__" in data and not interrupt_yielded:
-                    interrupt_values = data["__interrupt__"]
-                    logger.info(
-                        f"检测到 __interrupt__: {len(interrupt_values)} 个中断"
-                        f" (subgraph={is_subgraph})"
-                    )
-                    for intr in interrupt_values:
-                        yield _format_interrupt_event(intr)
-                    interrupt_yielded = True
-                    continue
+                # ★ 重要：不使用 continue，先处理同 dict 内的节点更新（含 tool_ready），
+                #   再处理 interrupt。否则 LangGraph 将 AIMessage 与 __interrupt__ 放在同一
+                #   update dict 时，tool_ready 事件会被 continue 跳过，导致前端工具卡片
+                #   停留在"构建中"状态无法变为"等待确认"。
+                has_interrupt = "__interrupt__" in data and not interrupt_yielded
 
                 for node_name, update in data.items():
                     if node_name.startswith("__") or node_name == "thinker":
@@ -201,6 +206,18 @@ async def stream_graph_events(
                                     t_input = getattr(tc, "args", {}) or {}
                                     t_id = getattr(tc, "id", "") or ""
                                 yield {"type": "tool_ready", "tool": t_name, "input": t_input, "id": t_id, "agent": display_name}
+
+                # ★ interrupt 必须在同 dict 的节点更新（tool_ready）处理完之后再发送
+                #   否则前端收到 interrupt 时工具块还在 isBuilding 状态，无法正确暂停
+                if has_interrupt:
+                    interrupt_values = data["__interrupt__"]
+                    logger.info(
+                        f"检测到 __interrupt__: {len(interrupt_values)} 个中断"
+                        f" (subgraph={is_subgraph})"
+                    )
+                    for intr in interrupt_values:
+                        yield _format_interrupt_event(intr)
+                    interrupt_yielded = True
 
         if last_node is not None and last_node != "thinker":
             yield {"type": "agent_end", "agent": last_node}

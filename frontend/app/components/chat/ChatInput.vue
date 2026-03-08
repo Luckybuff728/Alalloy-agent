@@ -35,9 +35,6 @@ import { ElInput } from 'element-plus'
 const props = defineProps({
   isGenerating: { type: Boolean, default: false },
   modelValue:   { type: String,  default: '' },
-  // 保留 props 接口兼容父组件，但不在本组件内做复杂判断
-  connectionState:  { type: String,  default: 'connected' },
-  shouldReconnect:  { type: Boolean, default: true },
 })
 
 const emit = defineEmits(['update:modelValue', 'send-message', 'stop-generate'])

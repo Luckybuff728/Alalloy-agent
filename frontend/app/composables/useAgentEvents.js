@@ -55,11 +55,6 @@ export function createEventHandlers(context) {
     clientId.value = data.client_id
     console.log('[AgentEvents] 连接模式:', data.mode, 'session_id:', data.session_id)
     
-    // 显示连接成功消息（仅在消息少时显示）
-    if (!messages.value.length || messages.value.length < 5) {
-      ElMessage.success('对话式助手已连接')
-    }
-    
     refreshSessions()
   }
 
@@ -100,7 +95,7 @@ export function createEventHandlers(context) {
 
   const handleToolCallArgs = (data) => {
     if (streamingMessage.value) {
-      updateToolBlockArgs(streamingMessage.value, data.args, 0, data.id)
+      updateToolBlockArgs(streamingMessage.value, data.args, 0, data.id, data.tool || null)
       messages.value = [...messages.value]
     }
   }
@@ -177,7 +172,7 @@ export function createEventHandlers(context) {
       return
     }
     emittedToolResults.value.add(dedupeKey)
-    
+
     handleToolResult(data)
     
     // 更新工具块结果
@@ -282,12 +277,7 @@ export function createEventHandlers(context) {
   // ==================== 错误事件 ====================
   
   const handleError = (data) => {
-    ElMessage.error(data.message || '发生错误')
-    addMessage({
-      type: 'error',
-      content: `❌ ${data.message}`,
-      timestamp: new Date().toISOString()
-    })
+    console.error('[AgentEvents] 错误事件:', data.message)
     isAgentTyping.value = false
     if (streamingMessage.value) {
       streamingMessage.value.isStreaming = false
@@ -363,7 +353,7 @@ export function dispatchEvent(handlers, data) {
       handler(data)
     } catch (error) {
       console.error(`[AgentEvents] 处理 ${data.type} 事件失败:`, error)
-      ElMessage.error(`消息处理异常: ${error.message}`)
+      console.error(`[AgentEvents] 处理 ${data.type} 事件异常:`, error.message)
     }
   } else {
     console.log('[AgentEvents] 未处理的消息类型:', data.type)

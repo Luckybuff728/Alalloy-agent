@@ -21,7 +21,7 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 
 from .state import AlalloyState
 from .nodes import thinker_node, build_expert_agents
-from ..tools import DATA_EXPERT_TOOLS, ANALYST_TOOLS
+from ..tools import DATA_EXPERT_TOOLS, ANALYST_TOOLS, REPORT_WRITER_TOOLS
 from ..core.logger import logger
 from ..infra.supabase_client import get_db_connection_string, is_fallback_mode
 from ..infra.mcp_service import categorize_mcp_tools
@@ -65,14 +65,26 @@ def build_graph(
     )
 
     # ==================== 构建 create_agent 子图 ====================
-    # calphad_submit_names 用于动态生成 HITL 配置（若 calphad_tools 可用）
-    calphad_submit_names = [t.name for t in calphad_tools if "submit" in t.name] if calphad_tools else []
+    # 只对耗时较长的 CalphaMesh 任务开启 HITL（秒级的快速任务直接执行，不打断用户）：
+    #   保留 HITL：scheil（多步凝固，分钟级）、binary（二元相图，分钟级）、ternary（三元截面，最长）
+    #   去掉 HITL：point（单点，秒级）、line（温度扫描，秒级-1min）、
+    #             boiling_point（单点，秒级）、thermo_properties（性质扫描，中速）
+    LONG_RUNNING_SUBMIT_TOOLS = {
+        "calphamesh_submit_scheil_task",
+        "calphamesh_submit_binary_task",
+        "calphamesh_submit_ternary_task",
+    }
+    calphad_submit_names = [
+        t.name for t in calphad_tools
+        if "submit" in t.name and t.name in LONG_RUNNING_SUBMIT_TOOLS
+    ] if calphad_tools else []
     hitl_config = {name: True for name in calphad_submit_names} if calphad_submit_names else None
 
     dataExpert_agent, analysisExpert_agent, reportWriter_agent = build_expert_agents(
         data_expert_tools=data_expert_tools,
         analysis_expert_tools=analyst_tools,
         calphad_hitl_tools=hitl_config,
+        report_writer_tools=REPORT_WRITER_TOOLS,
     )
 
     # ==================== 创建图 ====================

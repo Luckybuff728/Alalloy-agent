@@ -21,7 +21,6 @@ import { useSessions } from './useSessions'
 import { processToolResult } from '../utils/toolResultHandler'
 import { restoreSessionState as restoreSessionStateUtil } from '../utils/sessionRestorer'
 import { useResultsStore } from '../stores/results'
-import { createEventHandlers, dispatchEvent } from './useAgentEvents'
 import {
   createAgentMessage,
   appendTextToContentBlocks,
@@ -80,10 +79,12 @@ export function useMultiAgent() {
   // 挂件缓冲队列（用于 chat_complete 后批量挂载挂件）
   const widgetQueue = ref([])
 
-  // ★ 并行工具执行计数器
-  // 解决问题：多个工具同时运行时，第一个 tool_end 不应过早清除 activeTool 和长任务状态
-  // 规则：tool_ready → +1；tool_end → -1；归零时才清除状态
-  const _runningToolCount = ref(0)
+  // ★ 并行工具执行 ID 集合（替代整数计数器）
+  // 问题：整数计数器在 tool_end 先于 tool_ready 到达时会出现负数或乱序，
+  //       Math.max(0, count-1) 兜底会导致计数永久偏低。
+  // 修复：用 Set<tool_call_id> 追踪正在执行的工具，精确匹配 add/delete，
+  //       size === 0 才清除状态，任何顺序下都正确。
+  const _runningToolIds = ref(/** @type {Set<string>} */ (new Set()))
 
   // ==================== 工具状态辅助函数 ====================
 
@@ -92,7 +93,7 @@ export function useMultiAgent() {
    * 在 chat_complete / interrupt / generate_stopped / stopGenerate / session reset 时调用
    */
   const _clearActiveTools = () => {
-    _runningToolCount.value = 0
+    _runningToolIds.value = new Set()
     activeTool.value = null
     setLongTaskStatus(false)
   }
@@ -230,10 +231,7 @@ export function useMultiAgent() {
         clientId.value = data.client_id
         console.log('[ChatAgent] 连接模式:', data.mode, 'session_id:', data.session_id)
         
-        // 显示连接成功消息（仅在消息少时显示，避免刷屏）
-        if (!messages.value.length || messages.value.length < 5) {
-          ElMessage.success('对话式助手已连接')
-        }
+        // 连接成功静默处理，状态栏会自动更新
         
         // 刷新会话列表
         refreshSessions()
@@ -266,7 +264,7 @@ export function useMultiAgent() {
       // tool_call_start：检测到工具调用开始
       // ★ 核心：将当前 pending 块转为 thinking 块，并创建工具块
       case 'tool_call_start':
-        console.log('[useMultiAgent] tool_call_start 收到:', data.tool)
+        console.log('[useMultiAgent] tool_call_start:', data.tool, data.id || '')
         
         // ★ 引导挂件工具不显示调用框（通过 interrupt 机制处理）
         // 关键：分析内容应作为 chat 块（正常回复），而不是 thinking 块
@@ -280,47 +278,54 @@ export function useMultiAgent() {
           break
         }
         
-        if (streamingMessage.value) {
-          // ★ ReAct 模式：工具调用前的内容是推理过程，转为 thinking 块
-          // thinking 块在 chat_complete 时统一折叠
-          convertPendingBlockToThinking(streamingMessage.value)
-          // 创建工具块（参数构建中状态）
-          addToolBlockToMessage(streamingMessage.value, {
-            name: data.tool,
-            displayName: data.tool,
-            id: data.id || '',
-            input: {},
-            inputJson: '',  // 用于显示参数构建过程
-            isBuilding: true,  // 参数构建中
-            isRunning: false,
-            isPaused: false,
-            isCancelled: false,
-            result: null
-          })
-          messages.value = [...messages.value]
+        // ★ 防御：resume 后 LLM 若直接发出工具调用（无 chat_token 前置），
+        //   streamingMessage.value 可能为 null，此时主动创建新消息气泡。
+        if (!streamingMessage.value) {
+          streamingMessage.value = createNewAgentMessage()
+          messages.value.push(streamingMessage.value)
         }
+        // ★ ReAct 模式：工具调用前的内容是推理过程，转为 thinking 块
+        convertPendingBlockToThinking(streamingMessage.value)
+        // 创建工具块（参数构建中状态）
+        addToolBlockToMessage(streamingMessage.value, {
+          name: data.tool,
+          displayName: data.tool,
+          id: data.id || '',
+          input: {},
+          inputJson: '',  // 用于显示参数构建过程
+          isBuilding: true,  // 参数构建中
+          isRunning: false,
+          isPaused: false,
+          isCancelled: false,
+          result: null
+        })
+        messages.value = [...messages.value]
         break
 
       // tool_call_args：工具参数片段（实时显示参数构建）
       case 'tool_call_args':
         if (streamingMessage.value) {
-          // ★ 传入 tool_call_id 支持同一工具多次调用
-          updateToolBlockArgs(streamingMessage.value, data.args, data.index, data.id || data.tool_call_id)
+          // ★ 传入 tool_call_id 和 tool 名称，支持并行同名工具的正确匹配
+          updateToolBlockArgs(streamingMessage.value, data.args, data.index, data.id || data.tool_call_id, data.tool || null)
           messages.value = [...messages.value]
         }
         break
 
       // tool_ready：工具参数完整（确认信号），此处是工具实际开始执行的起点
       case 'tool_ready':
-        console.log('[useMultiAgent] tool_ready 收到:', data.tool, data.id)
+        console.log('[useMultiAgent] tool_ready:', data.tool, data.id || '')
         if (streamingMessage.value) {
           // ★ 传入 tool_call_id 支持同一工具多次调用
           finalizeToolBlock(streamingMessage.value, data.tool, data.input, data.id || data.tool_call_id)
           messages.value = [...messages.value]
         }
-        // ★ 并行计数：每个 tool_ready 对应一个正在执行的工具
-        // tool_end 时配对递减，归零才清除状态
-        _runningToolCount.value++
+        // ★ 并行追踪：用 tool_call_id 精确记录每个正在执行的工具
+        // tool_end 时配对删除，Set 为空才清除状态
+        {
+          const next = new Set(_runningToolIds.value)
+          next.add(data.id || data.tool)
+          _runningToolIds.value = next
+        }
         activeTool.value = data.tool
         setLongTaskStatus(true)
         break
@@ -329,29 +334,54 @@ export function useMultiAgent() {
       case 'chat_start':
         // 强制结束所有历史消息的流式状态，清理光标残留
         messages.value.forEach(m => { if (m.isStreaming) m.isStreaming = false })
-        // 重置本轮内部状态（去重集合、widget 缓冲、旧 streamingMessage）
+        // 重置本轮内部状态（去重集合、widget 缓冲）
         emittedToolResults.value.clear()
         widgetQueue.value = []
-        streamingMessage.value = null
 
         isAgentTyping.value = true
         currentAgent.value = '🔀 智能路由'
-        streamingMessage.value = {
-          id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-          type: 'agent',
-          agent: currentAgent.value,
-          contentBlocks: [],
-          isStreaming: true,
-          isThinking: false,
-          reasoning: '',
-          timestamp: new Date().toISOString()
+
+        // ★ sendMessage 已提前创建占位气泡以消除空白期。
+        //   若该占位仍为空（contentBlocks 空且无 content），直接复用并更新 agent 名，
+        //   避免重复推送导致出现两个 agent 消息气泡。
+        //   若占位已有内容（罕见：后端重入 / 重连场景），正常新建。
+        if (streamingMessage.value && streamingMessage.value.contentBlocks?.length === 0 && !streamingMessage.value.content) {
+          streamingMessage.value.agent = currentAgent.value
+          streamingMessage.value.isStreaming = true
+        } else {
+          streamingMessage.value = null
+          streamingMessage.value = createNewAgentMessage()
+          messages.value.push(streamingMessage.value)
         }
-        messages.value.push(streamingMessage.value)
         break
 
       case 'resume_start':
         // interrupt resume 开始 - 不创建新消息气泡
         // 后续的 tool_start / chat_token 事件会按需创建
+        //
+        // ★ dedup 清理策略：
+        //   - 成功工具的 tool_call_id：保留在 dedup，防止 LangGraph 重播时重复添加结果卡片
+        //   - 失败工具（hasError=true）的 tool_call_id：从 dedup 中移除，
+        //     使 LLM 重试时的新 tool_result（同 id）能被正常处理并更新 UI
+        //     （LangGraph 重试时有时复用旧 tool_call_id，有时生成新 id；两种情况都需要覆盖错误状态）
+        {
+          const errorBlocks = []
+          if (streamingMessage.value?.contentBlocks) {
+            streamingMessage.value.contentBlocks.forEach(b => {
+              if (b.type === 'tool' && b.hasError && b.id) errorBlocks.push(b.id)
+            })
+          } else {
+            // streamingMessage 已置 null（HITL interrupt 后），从历史消息中查找
+            const lastAgentMsg = [...messages.value].reverse().find(m => m.type === 'agent')
+            lastAgentMsg?.contentBlocks?.forEach(b => {
+              if (b.type === 'tool' && b.hasError && b.id) errorBlocks.push(b.id)
+            })
+          }
+          if (errorBlocks.length > 0) {
+            errorBlocks.forEach(id => emittedToolResults.value.delete(id))
+            console.log('[ChatAgent] resume_start: 清除失败工具 dedup 条目，允许重试覆盖:', errorBlocks)
+          }
+        }
         isAgentTyping.value = true
         break
 
@@ -380,7 +410,11 @@ export function useMultiAgent() {
       // ★ 注意：当前后端不发送 tool_start（已由 tool_call_start + tool_ready 替代）
       // 保留此分支以兼容可能的旧版或外部后端，但正常流程中不会触发
       case 'tool_start':
-        _runningToolCount.value++
+        {
+          const next = new Set(_runningToolIds.value)
+          next.add(data.tool_call_id || data.id || data.tool)
+          _runningToolIds.value = next
+        }
         activeTool.value = data.display_name || data.tool
         setLongTaskStatus(true)
         if (!streamingMessage.value) {
@@ -411,15 +445,21 @@ export function useMultiAgent() {
 
       case 'tool_end':
         // ★ 使用 tool_call_id 精确匹配更新工具块状态
+        // ★ targetMsg 备用：HITL resume 后 streamingMessage 已被 sendResume 恢复为 targetMsg，
+        //   但保留 findLast 兜底防止其他边界情况（如连接重连后的重播）
         {
-          const toolBlock = findToolBlock(streamingMessage.value, data.tool, data.tool_call_id)
+          const _endMsg = streamingMessage.value
+            || messages.value.findLast(m => m.type === 'agent')
+          const toolBlock = findToolBlock(_endMsg, data.tool, data.tool_call_id)
           if (toolBlock) {
             toolBlock.isRunning = false
+            toolBlock.isBuilding = false  // 防御性清除：若 tool_ready 丢失导致 isBuilding 残留
           }
-          // ★ 并行安全：只有所有工具都完成后才清除活跃状态
-          // Math.max(0, ...) 防止计数器因事件乱序变为负数
-          _runningToolCount.value = Math.max(0, _runningToolCount.value - 1)
-          if (_runningToolCount.value === 0) {
+          // ★ 并行安全：从 Set 中精确删除，size === 0 才清除状态
+          const next = new Set(_runningToolIds.value)
+          next.delete(data.tool_call_id || data.id || data.tool)
+          _runningToolIds.value = next
+          if (_runningToolIds.value.size === 0) {
             activeTool.value = null
             setLongTaskStatus(false)
           }
@@ -440,11 +480,14 @@ export function useMultiAgent() {
             break
           }
           emittedToolResults.value.add(dedupeKey)
-          // 更新工具块结果（使用 tool_call_id 精确匹配）
-          const toolBlock = findToolBlock(streamingMessage.value, data.tool, data.tool_call_id)
+          // ★ targetMsg 备用：同 tool_end，防止 streamingMessage 为 null 时无法定位块
+          const _resultMsg = streamingMessage.value
+            || messages.value.findLast(m => m.type === 'agent')
+          const toolBlock = findToolBlock(_resultMsg, data.tool, data.tool_call_id)
           if (toolBlock) {
             toolBlock.result = data.result
             toolBlock.isRunning = false
+            toolBlock.isBuilding = false  // 防御性清除
             // ★ 错误标记：优先使用后端下发的 is_error 字段（精确），
             //   兜底检测错误关键词（兼容未升级后端）
             const resultStr = typeof data.result === 'string' ? data.result : ''
@@ -527,21 +570,17 @@ export function useMultiAgent() {
       case 'chat_error':
       case 'error':
         ElMessage.error(data.message || '发生错误')
-        addMessage({
-          type: 'error',
-          content: `❌ ${data.message}`,
-          timestamp: new Date().toISOString()
-        })
         isAgentTyping.value = false
         if (streamingMessage.value) {
+          collapseAllThinkingBlocks(streamingMessage.value)
           streamingMessage.value.isStreaming = false
-          messages.value = [...messages.value] 
+          messages.value = [...messages.value]
           streamingMessage.value = null
         }
         break
 
       case 'interaction_ack':
-        console.log('[ChatAgent] Interaction Acknowledged:', data)
+        console.log('[ChatAgent] Interaction Acknowledged')
         break
 
       case 'parameters_set':
@@ -553,7 +592,18 @@ export function useMultiAgent() {
 
       case 'session_state':
         if (data.state) {
-          // ★ 使用 Pinia store 恢复业务状态
+          // ★ 重连恢复：先清空结果面板和去重集合，再从 UI 快照恢复
+          //   原因：重连同一 session 时，resultsStore 可能仍持有断线前的卡片；
+          //   UI 快照是断线前最后一次 saveUISnapshot 的状态（通常在 HITL 前）。
+          //   若不先清空，快照中的结果会叠加到旧卡片上，resume 后重播结果也会叠加。
+          //   清空后：resultsStore = 空 → 从快照恢复（ONNX 结果等）
+          //          emittedToolResults = 空 → 允许 resume 后重播所有 tool_result 入场
+          //   注意：emittedToolResults 在本次 resume 的 stream 里会重新积累，
+          //         同 stream 内不会有重复 tool_result 问题。
+          resultsStore.clearAll()
+          emittedToolResults.value.clear()
+          console.log('[ChatAgent] session_state: 已清空 resultsStore 和 emittedToolResults，准备从快照恢复')
+
           restoreSessionStateUtil({
             stateData: data.state,
             refs: { sessionId, messages },
@@ -587,6 +637,8 @@ export function useMultiAgent() {
             if (targetMsg) {
               // ★ 确保所有 pending 块都转为 chat（防止 tool_call_start 事件丢失的情况）
               finalizePendingBlocksAsChat(targetMsg)
+              // interrupt 后不会有 chat_complete，在此统一收起思考块
+              collapseAllThinkingBlocks(targetMsg)
               // 将 widget 附加到消息末尾
               targetMsg.widget = data.payload.widget
               targetMsg.isStreaming = false
@@ -606,24 +658,48 @@ export function useMultiAgent() {
             // 保存完整 interrupt payload 到消息，供 sendResume 重建有序 decisions
             targetMsg._hitlPayload = data.payload
 
+            // 构建 HITL 工具集合（action_requests 是唯一权威来源）
+            // ★ 修复1：只暂停 action_requests 中包含的工具，不影响非 HITL 工具
+            //   （如 onnx_model_inference 不在 interrupt_on 中，不应被暂停）
+            // ★ 修复2：优先使用工具名匹配（action.name 始终存在），
+            //   ID 匹配作为辅助——避免 action_requests 无 id 字段时漏掉 HITL 工具
+            const hitlNames = new Set(allActionRequests.map(a => a.name).filter(Boolean))
+            // ID Set 仅在 action_requests 全部有 id 时才有意义（辅助用）
+            const hitlIds   = new Set(allActionRequests.map(a => a.id).filter(Boolean))
+
             for (const block of targetMsg.contentBlocks) {
-              if (block.type === 'tool' && block.isRunning) {
-                block.isRunning = false
-                block.isPaused = true
-                if (!block.interruptPayload && data.payload) {
-                  // ★ 优先按 tool_call_id (a.id === block.id) 匹配，
-                  //   确保同名工具多次调用时每个块注入自己正确的 action；
-                  //   兜底按工具名匹配（兼容未携带 id 的旧版中间件）
-                  const matchedAction = allActionRequests.find(a =>
-                    (a.id && block.id) ? a.id === block.id : a.name === block.name
-                  )
-                  block.interruptPayload = matchedAction
-                    ? { ...data.payload, action_requests: [matchedAction] }
-                    : data.payload
-                }
+              // ★ 修复3：同时处理 isBuilding（tool_ready 尚未到达）和 isRunning 状态
+              //   interrupt 可能在 tool_ready 之前到达（取决于 LangGraph 事件顺序）
+              if (block.type !== 'tool') continue
+              if (!block.isRunning && !block.isBuilding) continue
+
+              // 判断该工具块是否属于本次 HITL
+              // 优先按工具名判断（最可靠），ID 匹配作为补充
+              const isHITLBlock = hitlNames.has(block.name)
+                || (block.id && hitlIds.size > 0 && hitlIds.has(block.id))
+
+              if (!isHITLBlock) {
+                // 非 HITL 工具：保持原状，不暂停，不注入 interruptPayload
+                continue
+              }
+
+              block.isRunning = false
+              block.isBuilding = false  // ★ 同时清除 isBuilding 状态
+              block.isPaused = true
+              if (!block.interruptPayload && data.payload) {
+                // 按 tool_call_id 精确匹配，同名工具多次调用时各注入正确的 action；
+                // 兜底用工具名匹配（当 action 没有 id 字段时）
+                const matchedAction = allActionRequests.find(a =>
+                  (a.id && block.id) ? a.id === block.id : a.name === block.name
+                )
+                block.interruptPayload = matchedAction
+                  ? { ...data.payload, action_requests: [matchedAction] }
+                  : data.payload
               }
             }
             targetMsg.isStreaming = false
+            // interrupt 后不会有 chat_complete，在此统一收起思考块
+            collapseAllThinkingBlocks(targetMsg)
           }
           
           streamingMessage.value = null
@@ -773,6 +849,12 @@ export function useMultiAgent() {
       timestamp: new Date().toISOString()
     })
 
+    // ★ 立即创建 agent 占位气泡并开启 typing 状态，消除"发送→chat_start"之间的空白期。
+    //   chat_start 到达时会检测到此占位消息并复用，而不会重复推送新气泡。
+    isAgentTyping.value = true
+    streamingMessage.value = createNewAgentMessage()
+    messages.value.push(streamingMessage.value)
+
     wsSend({
       type: 'chat_message',
       content: content,
@@ -789,9 +871,18 @@ export function useMultiAgent() {
     })
   }
 
-  // 跨工具块 HITL 决策聚合（key: toolName → decision object）
+  // 跨工具块 HITL 决策聚合
   // 当单次 interrupt 含多个 action_requests 时，需等所有工具块都确认后再发送 resume
-  const _hitlAccumulator = {}
+  //
+  // ★ 架构说明：ChatMessage.vue 每个工具块使用独立 ToolStatusWidget(:tools="[block]")，
+  //   每次用户确认单个工具，checkBatchComplete 立即 emit（因其 pausedTools 只有1个工具）。
+  //   sendResume 必须自行累计决策，等到 allActions 中每个 action 都有对应决策后才发送。
+  //
+  // ★ ID 优先策略：
+  //   _hitlAccumulatorById  以 tool_call_id 为 key，精确追踪每个具体调用（主路径）。
+  //   _hitlAccumulator      以 toolName 为 key，仅作为后端 ID 缺失时的兜底备用。
+  const _hitlAccumulatorById = {}    // { toolCallId → { name, decision } } 精确追踪
+  const _hitlAccumulator = {}        // { toolName → decision } 兜底备用（ID 缺失时）
 
   /**
    * 恢复被 interrupt() 暂停的执行
@@ -815,42 +906,87 @@ export function useMultiAgent() {
       const allActions = targetMsg?._hitlPayload?.action_requests || []
 
       // 累积本次决策
-      Object.assign(_hitlAccumulator, value.decisionByTool)
+      // 主路径：以 tool_call_id 为 key（decisionById 由 ToolStatusWidget 提供）
+      if (value.decisionById) {
+        Object.assign(_hitlAccumulatorById, value.decisionById)
+      }
+      // 兜底：以 toolName 为 key（后端 ID 缺失时备用）
+      for (const [name, decision] of Object.entries(value.decisionByTool)) {
+        _hitlAccumulator[name] = decision
+      }
 
-      // 更新已决策工具块的 UI 状态（isPaused → isRunning/isCancelled）
+      // ★ allDecided：ID 优先检查
+      //   有 action.id → 在 _hitlAccumulatorById 中查找对应条目
+      //   无 action.id → 回退到名称计数法（确认次数 ≥ 同名 action 数量）
+      const actionNameCounts = {}
+      for (const a of allActions) {
+        if (!a.id) actionNameCounts[a.name] = (actionNameCounts[a.name] || 0) + 1
+      }
+      const nameConfirmedCount = {}
+      for (const { name } of Object.values(_hitlAccumulatorById)) {
+        nameConfirmedCount[name] = (nameConfirmedCount[name] || 0) + 1
+      }
+
+      const allDecided = allActions.length > 0
+        ? allActions.every(a => {
+            if (a.id) return a.id in _hitlAccumulatorById
+            // 无 id 时用名称计数兜底
+            return (nameConfirmedCount[a.name] || 0) >= (actionNameCounts[a.name] || 1)
+          })
+        : true
+
+      if (!allDecided) {
+        const remaining = allActions
+          .filter(a => a.id ? !(a.id in _hitlAccumulatorById) : (nameConfirmedCount[a.name] || 0) < (actionNameCounts[a.name] || 1))
+          .map(a => a.id ? `${a.name}(id=${a.id})` : a.name)
+        console.log(`[ChatAgent] HITL 等待更多确认: ${remaining.join(', ')}`)
+        return
+      }
+
+      // 全部决策收齐 → 一次性更新所有已决策工具块的 UI 状态
+      // ★ 延迟到 allDecided=true 后才改变块状态
       if (targetMsg) {
-        for (const [toolName, decision] of Object.entries(value.decisionByTool)) {
-          const block = targetMsg.contentBlocks?.find(
-            b => b.type === 'tool' && b.isPaused && b.name === toolName
-          )
-          if (block) {
-            block.interruptPayload = null
-            block.isPaused = false
-            block.isRunning = decision?.type !== 'reject'
-            block.isCancelled = decision?.type === 'reject'
+        const _applyDecisionToBlock = (block, decision) => {
+          block.interruptPayload = null
+          block.isPaused = false
+          block.isRunning = decision?.type !== 'reject'
+          block.isCancelled = decision?.type === 'reject'
+        }
+
+        if (allActions.length > 0) {
+          for (const action of allActions) {
+            // ID 优先：从 _hitlAccumulatorById 取该 action 对应的决策
+            const entry = action.id ? _hitlAccumulatorById[action.id] : null
+            const decision = entry?.decision ?? _hitlAccumulator[action.name] ?? { type: 'approve' }
+            const block = targetMsg.contentBlocks?.find(b => {
+              if (b.type !== 'tool' || !b.isPaused) return false
+              if (action.id && b.id) return b.id === action.id
+              return b.name === action.name
+            })
+            if (block) _applyDecisionToBlock(block, decision)
+          }
+        } else {
+          // 兜底：action_requests 为空时按工具名更新（兼容旧后端）
+          for (const [toolName, decision] of Object.entries(value.decisionByTool)) {
+            const block = targetMsg.contentBlocks?.find(b =>
+              b.type === 'tool' && b.isPaused && b.name === toolName
+            )
+            if (block) _applyDecisionToBlock(block, decision)
           }
         }
         messages.value = [...messages.value]
       }
 
-      // 检查是否所有 action 都已收集到决策
-      const decidedNames = Object.keys(_hitlAccumulator)
-      const allDecided = allActions.length > 0
-        ? allActions.every(a => decidedNames.includes(a.name))
-        : true
-
-      if (!allDecided) {
-        const remaining = allActions.filter(a => !decidedNames.includes(a.name)).map(a => a.name)
-        console.log(`[ChatAgent] HITL 等待更多确认: ${remaining.join(', ')}`)
-        return
-      }
-
-      // 全部决策收齐 → 按原始 action_requests 顺序组装并发送
+      // 全部决策收齐 → 按原始 action_requests 顺序组装并发送（ID 优先取对应决策）
       const orderedDecisions = allActions.length > 0
-        ? allActions.map(a => _hitlAccumulator[a.name] ?? { type: 'approve' })
+        ? allActions.map(a => {
+            const entry = a.id ? _hitlAccumulatorById[a.id] : null
+            return entry?.decision ?? _hitlAccumulator[a.name] ?? { type: 'approve' }
+          })
         : Object.values(_hitlAccumulator)
 
       // 清空聚合器
+      for (const k of Object.keys(_hitlAccumulatorById)) delete _hitlAccumulatorById[k]
       for (const k of Object.keys(_hitlAccumulator)) delete _hitlAccumulator[k]
 
       if (targetMsg) {
@@ -860,13 +996,13 @@ export function useMultiAgent() {
       }
       isAgentTyping.value = true
 
-      console.log(`[ChatAgent] HITL 全部决策收齐，发送 resume:`, orderedDecisions)
+      console.log(`[ChatAgent] HITL 全部决策收齐，发送 resume (${orderedDecisions.length} 个决策)`)
       wsSend({ type: 'resume_interrupt', session_id: sessionId.value, value: { decisions: orderedDecisions } })
       return
     }
 
     // ── 非 HITL 路径（guidance_widget 等）直接发送 ─────────────────
-    console.log('[ChatAgent] 发送 resume:', value)
+    console.log('[ChatAgent] 发送 resume')
 
     if (targetMsg) {
       for (const block of targetMsg.contentBlocks) {

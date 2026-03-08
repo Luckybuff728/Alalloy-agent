@@ -1,4 +1,4 @@
-﻿# 环境变量（敏感信息）
+# 环境变量（敏感信息）
 .env
 
 # Python 缓存
@@ -62,3 +62,8 @@ TOOL_ERROR_HANDLING.md
 WIDGET_RESTORE_DESIGN.md
 frontend/.env
 upload_pubkey.ps1
+
+# Word/Office 文档（设计稿，不进代码库）
+*.docx
+*.xlsx
+*.pptx

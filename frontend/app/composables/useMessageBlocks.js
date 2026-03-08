@@ -78,7 +78,7 @@ export const convertPendingBlockToThinking = (msg) => {
     if (block.type === 'text' && block.blockType === 'pending') {
       block.blockType = 'thinking'
       block.duration = Math.round((Date.now() - block.startTime) / 1000)
-      block.collapsed = false  // ★ 保持展开，避免"先显示再折叠"的突变效果
+      block.collapsed = true  // ★ 思考完成后立即折叠；用户可点击标题手动展开
       delete block.startTime
       break
     }
@@ -157,7 +157,7 @@ export const addToolBlockToMessage = (msg, toolData) => {
 export const findToolBlock = (msg, toolName, toolCallId = null) => {
   if (!msg?.contentBlocks) return null
   
-  // 优先按 tool_call_id 查找
+  // 优先按 tool_call_id 精确匹配
   if (toolCallId) {
     const byId = msg.contentBlocks.find(b => 
       b.type === 'tool' && (b.id === toolCallId || b.tool_call_id === toolCallId)
@@ -165,7 +165,15 @@ export const findToolBlock = (msg, toolName, toolCallId = null) => {
     if (byId) return byId
   }
   
-  // 其次按名称查找最后一个
+  // ★ 兜底按名称查找：优先找第一个仍在建参的同名块（而非最后一个）
+  // 原因：并行调用同名工具时（如两个"单点平衡计算"），tool_ready 按创建顺序到达，
+  //       应 finalize 第一个建参中的块，而非最后一个。
+  const firstBuilding = msg.contentBlocks.find(
+    b => b.type === 'tool' && b.name === toolName && b.isBuilding
+  )
+  if (firstBuilding) return firstBuilding
+
+  // 最终兜底：找最后一个同名块（非建参状态时，如 updateToolBlockResult 等）
   return [...msg.contentBlocks].reverse().find(b => b.type === 'tool' && b.name === toolName) || null
 }
 
@@ -176,8 +184,9 @@ export const findToolBlock = (msg, toolName, toolCallId = null) => {
  * @param {string} argsFragment - 参数片段
  * @param {number} index - 索引（未使用）
  * @param {string} toolCallId - 工具调用 ID
+ * @param {string} toolName - 工具名称（用于无 ID 时的兜底匹配）
  */
-export const updateToolBlockArgs = (msg, argsFragment, index = 0, toolCallId = null) => {
+export const updateToolBlockArgs = (msg, argsFragment, index = 0, toolCallId = null, toolName = null) => {
   if (!msg.contentBlocks) return
   
   let toolBlock = null
@@ -189,9 +198,14 @@ export const updateToolBlockArgs = (msg, argsFragment, index = 0, toolCallId = n
     )
   }
   
-  // 否则找最后一个正在构建的工具块
+  // ★ 兜底：找第一个同名且仍在建参的块（不能用"最后一个建参块"，
+  //   并行同名工具时会将多个工具的参数混写到同一个块中）
+  if (!toolBlock && toolName) {
+    toolBlock = msg.contentBlocks.find(b => b.type === 'tool' && b.name === toolName && b.isBuilding)
+  }
+  // 最终兜底：任意第一个建参块（无法确定名称时）
   if (!toolBlock) {
-    toolBlock = [...msg.contentBlocks].reverse().find(b => b.type === 'tool' && b.isBuilding)
+    toolBlock = msg.contentBlocks.find(b => b.type === 'tool' && b.isBuilding)
   }
   
   if (toolBlock) {

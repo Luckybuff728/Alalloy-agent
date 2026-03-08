@@ -111,6 +111,7 @@ def build_expert_agents(
     data_expert_tools: List[Any],
     analysis_expert_tools: List[Any],
     calphad_hitl_tools: Dict[str, bool] = None,
+    report_writer_tools: List[Any] = None,
 ):
     """
     构建三个专家的 create_agent 子图。
@@ -189,14 +190,16 @@ def build_expert_agents(
         name="dataExpert",
     )
 
-    # --- analysisExpert (HITL 用于 Calphad 提交类工具批量确认) ---
-    # 关键：HITL 将单个 AIMessage 内的所有 tool_calls 合并为一次 interrupt。
-    # 提示词要求 LLM 在一次响应中并行调用所有提交工具 → 用户只看到一个确认框。
-    # 流程：models_list(1) + inference×N + guidance(1) + submit×3N(1次批量) + status×3N + guidance(1) = ~20次
+    # --- analysisExpert（HITL 仅用于耗时较长的 CalphaMesh 提交工具）---
+    # 只对分钟级的任务要求用户确认参数，秒级任务直接执行：
+    #   保留 HITL：scheil（多步凝固）、binary（二元相图）、ternary（三元截面）
+    #   去掉 HITL：point（单点，秒级）、line（温度扫描，秒级-1min）、
+    #             boiling_point（单点，秒级）、thermo_properties（性质扫描，中速）
+    # HITL 将同一 AIMessage 内的所有拦截工具合并为一次 interrupt（一个确认框）。
     calphad_hitl = calphad_hitl_tools or {
-        "calphamesh_submit_scheil_task": True,
-        "calphamesh_submit_point_task": True,
-        "calphamesh_submit_line_task": True,
+        "calphamesh_submit_scheil_task":  True,
+        "calphamesh_submit_binary_task":  True,
+        "calphamesh_submit_ternary_task": True,
     }
     analysisExpert_agent = create_agent(
         model=llm,
@@ -206,20 +209,22 @@ def build_expert_agents(
             HumanInTheLoopMiddleware(interrupt_on=calphad_hitl),
             tool_retry_mw,
             model_retry_mw,
-            ModelCallLimitMiddleware(run_limit=20, exit_behavior="end"),
+            ModelCallLimitMiddleware(run_limit=30, exit_behavior="end"),  # 7 类工具步数更多
             context_editing_mw,
         ],
         name="analysisExpert",
     )
 
-    # --- reportWriter (no tools, single-pass generation) ---
+    # --- reportWriter（generate_report 工具：return_direct=True，写完即退出）---
+    _rw_tools = report_writer_tools or []
     reportWriter_agent = create_agent(
         model=llm,
-        tools=[],
+        tools=_rw_tools,
         system_prompt=_load_prompt("reportWriter"),
         middleware=[
+            tool_retry_mw,
             model_retry_mw,
-            ModelCallLimitMiddleware(run_limit=4, exit_behavior="end"),
+            ModelCallLimitMiddleware(run_limit=6, exit_behavior="end"),
             context_editing_mw,
         ],
         name="reportWriter",
@@ -229,6 +234,6 @@ def build_expert_agents(
         f"create_agent 子图构建完成: "
         f"dataExpert(tools={len(data_expert_tools)}), "
         f"analysisExpert(tools={len(analysis_expert_tools)}), "
-        f"reportWriter(tools=0)"
+        f"reportWriter(tools={len(_rw_tools)})"
     )
     return dataExpert_agent, analysisExpert_agent, reportWriter_agent

@@ -37,9 +37,6 @@
     <ChatInput
       v-model="userInput"
       :is-generating="isGenerating"
-      :connection-state="connectionState"
-      :should-reconnect="shouldReconnect"
-
       @send-message="sendMessage"
       @stop-generate="stopGenerate"
     />
@@ -87,15 +84,6 @@ const props = defineProps({
     type: Boolean,
     default: false
   },
-  connectionState: {
-    type: String,
-    default: 'connected'
-  },
-  shouldReconnect: {
-    type: Boolean,
-    default: true
-  },
-
 })
 
 const emit = defineEmits(['send-message', 'stop-generate', 'widget-action', 'guidance-select'])
@@ -284,4 +272,5 @@ watch(() => props.isGenerating, (val) => {
   opacity: 0.3;
   user-select: none;
 }
+
 </style>

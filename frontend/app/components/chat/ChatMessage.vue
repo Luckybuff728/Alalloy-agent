@@ -714,7 +714,7 @@ const toggleThinking = () => {
 
 /* v3: Chat 块样式（最终回复） */
 .chat-block-wrapper {
-  /* 最终回复，正常显示 */
+  display: block;
 }
 
 /* v3: 工具块外层容器 */
@@ -746,4 +746,5 @@ const toggleThinking = () => {
 }
 .dot:nth-child(1) { animation-delay: -0.32s; }
 .dot:nth-child(2) { animation-delay: -0.16s; }
+
 </style>

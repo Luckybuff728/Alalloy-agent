@@ -360,65 +360,90 @@ const restoreIDMEResult = (content, store) => {
 }
 
 /**
- * 恢复待确认的挂件（HITL）
- * 
- * @param {Array} interrupts - 待确认的 interrupt 列表
- * @param {Ref} messages - 消息列表 ref
+ * 恢复待确认的挂件（HITL）- 降级路径专用
+ *
+ * 后端 _extract_pending_interrupts 实际返回格式：
+ *   { type: "guidance_widget" | "hitl_review" | "generic", id: string, payload: object }
+ *
+ * 注意：UI 快照路径不会进入此函数（快照已保存完整 widget/interruptPayload 状态）。
+ *
+ * @param {Array} interrupts - 待确认的 interrupt 列表（后端格式）
+ * @param {Ref} messages - 消息列表 ref（已由 rebuildMessagesWithContentBlocks 重建）
  */
 const restorePendingInterrupts = (interrupts, messages) => {
+  if (!interrupts || interrupts.length === 0) return
+
   let restoredCount = 0
-  
+
   for (const interrupt of interrupts) {
-    const { message_index, tool_call_id, tool_name, payload } = interrupt
-    
-    // 跳过无效的 interrupt
-    if (message_index < 0 || message_index >= messages.value.length) {
-      console.warn('[SessionRestorer] interrupt 关联的消息不存在:', message_index)
-      continue
-    }
-    
-    const targetMsg = messages.value[message_index]
-    
-    // 确保消息有 contentBlocks
-    if (!targetMsg.contentBlocks) {
-      targetMsg.contentBlocks = []
-    }
-    
-    // 查找对应的 tool block
-    let toolBlock = targetMsg.contentBlocks.find(block => 
-      block.type === 'tool' && block.id === tool_call_id
-    )
-    
-    // 如果没有找到，创建一个新的 tool block
-    if (!toolBlock) {
-      toolBlock = {
-        type: 'tool',
-        name: tool_name,
-        displayName: payload.tool_display_name || tool_name,
-        id: tool_call_id,
-        input: payload.params || {},
-        inputJson: JSON.stringify(payload.params || {}, null, 2),
-        isBuilding: false,
-        isRunning: false,
-        isPaused: true,  // ← 标记为暂停状态
-        isCancelled: false,
-        result: null,
-        interruptPayload: null
+    const { type, id, payload } = interrupt
+
+    if (type === 'guidance_widget') {
+      // ── 引导挂件：找到最后一条 agent 消息，附加 widget ─────────
+      // payload 格式: { interrupt_type: "guidance_widget", widget: {...}, ... }
+      const widget = payload?.widget
+      if (!widget) {
+        console.warn('[SessionRestorer] guidance_widget interrupt 缺少 widget 字段，id:', id)
+        continue
       }
-      targetMsg.contentBlocks.push(toolBlock)
+
+      const lastAgentMsg = [...messages.value].reverse().find(m => m.type === 'agent')
+      if (lastAgentMsg) {
+        lastAgentMsg.widget = widget
+        restoredCount++
+        console.log('[SessionRestorer] guidance_widget 已恢复到最后一条 agent 消息:', widget.title)
+      } else {
+        console.warn('[SessionRestorer] 未找到 agent 消息用于附加 guidance_widget')
+      }
+
+    } else if (type === 'hitl_review') {
+      // ── HITL 工具审批：在 agent 消息的 tool blocks 中找到匹配的工具 ──
+      // payload 格式: { action_requests: [{name, args}, ...], review_configs: [...] }
+      const actionRequests = payload?.action_requests || []
+      const toolNames = new Set(actionRequests.map(a => a.name).filter(Boolean))
+
+      if (toolNames.size === 0) {
+        console.warn('[SessionRestorer] hitl_review interrupt 的 action_requests 为空，id:', id)
+        continue
+      }
+
+      // 从最后一条消息向前搜索，找到包含对应工具块的 agent 消息
+      let found = false
+      for (let i = messages.value.length - 1; i >= 0; i--) {
+        const msg = messages.value[i]
+        if (msg.type !== 'agent' || !Array.isArray(msg.contentBlocks)) continue
+
+        const matchedBlocks = msg.contentBlocks.filter(
+          b => b.type === 'tool' && toolNames.has(b.name)
+        )
+
+        if (matchedBlocks.length > 0) {
+          for (const block of matchedBlocks) {
+            block.isPaused = true
+            block.isRunning = false
+            block.interruptPayload = payload
+            restoredCount++
+          }
+          // 保存整个 hitl payload 到消息，供 sendResume 重建有序 decisions
+          msg._hitlPayload = payload
+          found = true
+          console.log('[SessionRestorer] hitl_review 已恢复到工具块:', [...toolNames].join(', '))
+          break
+        }
+      }
+
+      if (!found) {
+        console.warn('[SessionRestorer] 未找到匹配工具块用于 hitl_review，工具:', [...toolNames].join(', '))
+      }
+
+    } else {
+      // generic：暂无针对性 UI 恢复逻辑，记录日志即可
+      console.log('[SessionRestorer] 跳过 generic interrupt 恢复，id:', id)
     }
-    
-    // ★ 附加 interruptPayload（触发 ToolConfirmWidget 渲染）
-    toolBlock.isPaused = true
-    toolBlock.isRunning = false
-    toolBlock.interruptPayload = payload
-    
-    restoredCount++
   }
-  
+
   if (restoredCount > 0) {
     console.log(`[SessionRestorer] 成功恢复 ${restoredCount} 个待确认挂件`)
-    // 触发响应式更新
     messages.value = [...messages.value]
   }
 }

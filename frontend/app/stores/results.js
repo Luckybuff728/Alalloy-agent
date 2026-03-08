@@ -123,18 +123,6 @@ export const useResultsStore = defineStore('results', () => {
     resultsList.value = []
   }
   
-  /**
-   * 从会话状态恢复结果
-   * @param {object} state - 后端返回的会话状态
-   */
-  const restoreFromState = (state) => {
-    if (state.validationResult) validationResult.value = state.validationResult
-    if (state.performancePrediction) performancePrediction.value = state.performancePrediction
-    if (state.historicalData) historicalData.value = state.historicalData
-    if (state.optimizationResults) optimizationResults.value = state.optimizationResults
-    if (state.experimentWorkorder) experimentWorkorder.value = state.experimentWorkorder
-  }
-  
   return {
     // 状态
     validationResult,
@@ -152,7 +140,6 @@ export const useResultsStore = defineStore('results', () => {
     // 方法
     addResult,
     updateState,
-    clearAll,
-    restoreFromState
+    clearAll
   }
 })

@@ -12,6 +12,9 @@ from ..infra.idme_service import get_idme_service
 from ..core.logger import logger
 
 
+SUPPORTED_SYSTEMS = {"Al-Si-Mg"}
+
+
 @tool
 def query_idme(
     material_system: str,
@@ -23,8 +26,12 @@ def query_idme(
 
     根据合金体系名称查询已有的材料数据，包括成分、力学性能等。
 
+    【重要约束】当前数据库仅收录 Al-Si-Mg 体系数据，无论用户提及哪些元素或添加剂，
+    material_system 必须固定传入 "Al-Si-Mg"。
+    传入其他体系字符串将返回空数据，对推荐无任何帮助。
+
     参数:
-        material_system: 合金体系名称（如 'Al-Si-Mg', 'Al-Cu-Mg'）
+        material_system: 合金体系名称，当前唯一有效值为 "Al-Si-Mg"
         page_size: 每页返回结果数量，默认 10
         page_number: 页码，默认 1
 
@@ -32,6 +39,23 @@ def query_idme(
         包含查询结果的字典，含 data 列表和分页信息
     """
     logger.info(f"工具调用: query_idme - 体系={material_system}")
+
+    if material_system not in SUPPORTED_SYSTEMS:
+        logger.warning(
+            f"query_idme: 不支持的体系 '{material_system}'，"
+            f"当前数据库仅包含 {SUPPORTED_SYSTEMS}"
+        )
+        return {
+            "status": "unsupported_system",
+            "material_system": material_system,
+            "total_count": 0,
+            "data": [],
+            "message": (
+                f"IDME 数据库当前仅收录 Al-Si-Mg 体系数据，"
+                f"'{material_system}' 无对应记录。"
+                f"请改用 material_system='Al-Si-Mg' 重新查询。"
+            ),
+        }
 
     service = get_idme_service()
     result = service.query(

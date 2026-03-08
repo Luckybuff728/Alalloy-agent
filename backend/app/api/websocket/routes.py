@@ -656,8 +656,13 @@ async def websocket_chat(websocket: WebSocket):
         await websocket.close(code=4003, reason="Invalid user")
         return
 
-    # ★ Problem #1 修复：处理并发会话冲突
-    # 如果该 session_id 已有连接，先关闭旧连接
+    # ★ 处理并发会话冲突：先取消旧流式任务，再关闭旧 WebSocket
+    # 顺序很重要：必须先 cancel task，再 close WS；
+    # 否则旧 task 会向已关闭的 WS 发送数据并抛出异常，
+    # 导致 _active_stream_tasks.pop() 在 finally 中提前移除任务，
+    # 而新连接的会话状态基于旧快照，丢失进行中的工具更新。
+    await _cancel_active_stream(session_id)
+
     existing_ws = connection_manager._connections.get(session_id)
     if existing_ws:
         try:

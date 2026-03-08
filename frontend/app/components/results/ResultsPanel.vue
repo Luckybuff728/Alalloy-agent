@@ -36,74 +36,105 @@
           <div class="result-header-strip">
             <div class="strip-left">
               <el-icon :size="18"><component :is="getResultIcon(result.type)" /></el-icon>
-              <h4>{{ getResultTitle(result.type) }}</h4>
+              <div class="strip-title-group">
+                <h4>{{ getResultTitle(result.type) }}</h4>
+                <!-- 合金成分标识（核心区分信息） -->
+                <span
+                  v-if="result.data?.alloyLabel"
+                  class="alloy-label-chip"
+                  :title="result.data.alloyLabel"
+                >{{ result.data.alloyLabel }}</span>
+              </div>
             </div>
             <span class="result-time">{{ formatTime(result.timestamp) }}</span>
           </div>
           
           <!-- 结果内容 -->
           <div class="result-body">
-            <!-- 性能预测 - 单个合金卡片 -->
+            <!-- ── 性能预测 ─────────────────────────────────────── -->
             <template v-if="result.type === 'performance' && result.data">
               <PerformanceCard :data="result.data" />
             </template>
-            
-            <!-- 性能对比 - 多合金对比 -->
+
             <template v-else-if="result.type === 'performance_compare' && result.data?.alloys">
               <div class="charts-grid">
                 <PerformanceBarChart :data="result.data.alloys" />
                 <PerformanceRadarChart :data="result.data.alloys" />
               </div>
             </template>
-            
-            <!-- Scheil 凝固曲线 -->
+
+            <!-- ── 热力学计算：Scheil 凝固 ─────────────────────── -->
             <template v-else-if="result.type === 'scheil'">
               <ScheilSolidificationChart
                 :data="result.data?.data"
                 :multiData="result.data?.multiData"
-                :title="result.data?.title || 'Scheil 凝固曲线'"
+                :rawResult="result.data?.raw"
+                :title="result.data?.title || 'Scheil 非平衡凝固曲线'"
               />
             </template>
-            
-            <!-- 相分数-温度曲线 -->
+
+            <!-- ── 热力学计算：相分数-温度曲线（line_calculation） -->
             <template v-else-if="result.type === 'phase_fraction' && result.data?.data">
               <PhaseFractionChart
                 :data="result.data.data"
                 :phases="result.data.phases || []"
-                :title="result.data.title"
+                :title="result.data.title || '相分数-温度曲线（平衡冷却）'"
               />
             </template>
-            
-            <!-- 吉布斯能-温度曲线 -->
+
+            <!-- ── 热力学计算：单点平衡（point_calculation） ───── -->
+            <template v-else-if="result.type === 'thermo_point'">
+              <PointCalculationCard :data="result.data" />
+            </template>
+
+            <!-- ── 热力学计算：二元平衡相图 ──────────────────────── -->
+            <template v-else-if="result.type === 'binary_phase'">
+              <BinaryPhaseCard :data="result.data" />
+            </template>
+
+            <!-- ── 热力学计算：三元等温截面 ──────────────────────── -->
+            <template v-else-if="result.type === 'ternary_phase'">
+              <TernaryPhaseCard :data="result.data" />
+            </template>
+
+            <!-- ── 热力学计算：熔点/沸点 ─────────────────────────── -->
+            <template v-else-if="result.type === 'boiling_point'">
+              <BoilingPointCard :data="result.data" />
+            </template>
+
+            <!-- ── 热力学计算：GM/HM/SM/CPM-T 曲线 ──────────────── -->
+            <template v-else-if="result.type === 'thermo_properties'">
+              <ThermoPropertiesChart :data="result.data" />
+            </template>
+
+            <!-- ── 热力学综合对比（旧路径兼容） ────────────────────── -->
             <template v-else-if="result.type === 'gibbs' && result.data">
               <GibbsEnergyChart
                 :data="result.data.data"
                 :phases="result.data.phases"
                 :multiData="result.data.multiData"
-                :title="result.data.title || '吉布斯能-温度曲线'"
+                :title="result.data.title || '摩尔吉布斯自由能-温度曲线'"
               />
             </template>
-            
-            <!-- 热力学综合对比 -->
+
             <template v-else-if="result.type === 'thermo' && result.data">
               <div class="charts-grid">
-                <ThermoCompareChart
-                  v-if="result.data.compare"
-                  :data="result.data.compare"
-                />
-                <ScheilSolidificationChart
-                  v-if="result.data.scheil"
-                  :multiData="result.data.scheil"
-                />
+                <ThermoCompareChart v-if="result.data.compare" :data="result.data.compare" />
+                <ScheilSolidificationChart v-if="result.data.scheil" :multiData="result.data.scheil" :rawResult="null" />
               </div>
             </template>
-            
-            <!-- IDME 知识检索结果 -->
+
+            <!-- ── IDME 知识检索 ───────────────────────────────── -->
             <template v-else-if="result.type === 'knowledge_search' && result.data">
               <KnowledgeSearchCard :data="result.data" />
             </template>
-            
-            <!-- 通用 JSON 展示（兜底） -->
+
+            <!-- ── 设计可行性报告 ──────────────────────────────── -->
+            <template v-else-if="result.type === 'alloy_design_report' && result.data">
+              <ReportCard :data="result.data" />
+            </template>
+
+            <!-- ── 通用 JSON 展示（兜底） ─────────────────────────── -->
             <template v-else>
               <pre class="raw-data">{{ formatJSON(result.data) }}</pre>
             </template>
@@ -139,8 +170,14 @@ import {
   PhaseFractionChart,
   GibbsEnergyChart,
   ThermoCompareChart,
-  KnowledgeSearchCard
+  KnowledgeSearchCard,
+  PointCalculationCard,
+  ThermoPropertiesChart,
+  BinaryPhaseCard,
+  TernaryPhaseCard,
+  BoilingPointCard,
 } from './charts'
+import ReportCard from './ReportCard.vue'
 
 const props = defineProps({
   results: {
@@ -175,7 +212,14 @@ const getResultIcon = (type) => {
     thermo: TrendingUpOutline,
     scheil: TrendingUpOutline,
     phase_fraction: TrendingUpOutline,
-    gibbs: TrendingUpOutline
+    thermo_point: TrendingUpOutline,
+    binary_phase: BarChartOutline,
+    ternary_phase: GitNetworkOutline,
+    boiling_point: TrendingUpOutline,
+    thermo_properties: TrendingUpOutline,
+    gibbs: TrendingUpOutline,
+    alloy_design_report: DocumentTextOutline,
+    knowledge_search: DocumentTextOutline,
   }
   return icons[type] || DocumentTextOutline
 }
@@ -354,19 +398,52 @@ const clearResults = () => {
   display: flex;
   align-items: center;
   gap: 6px;
+  overflow: hidden;
+  flex: 1;
+  min-width: 0;
+}
+
+.strip-title-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex-wrap: wrap;
 }
 
 .strip-left h4 {
   margin: 0;
-  font-size: 13px; /* 减小头部标题字号 */
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-primary, #1e293b);
   letter-spacing: 0.01em;
+  white-space: nowrap;
 }
 
 .strip-left .el-icon {
   color: var(--primary, #1967d2);
-  font-size: 14px; /* 减小图标大小 */
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+/* 合金成分标识 chip */
+.alloy-label-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--primary, #1967d2);
+  font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  /* 移除 max-width 截断，完整展示配方；悬停 title 属性可查看完整内容 */
+  cursor: default;
+  flex-shrink: 1;   /* 允许在极窄容器下收缩 */
+  min-width: 0;
 }
 
 .result-time {

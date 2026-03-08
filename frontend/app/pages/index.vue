@@ -32,33 +32,11 @@
       
       <!-- 中间：主内容区 -->
       <div class="center-panel">
-        <div v-if="messages.length > 0 && connectionState !== 'connected' && (connectionState !== 'disconnected' || shouldReconnect)" class="connection-status-banner" :class="connectionState">
-          <div class="status-content">
-            <el-icon v-if="connectionState === 'connecting' || connectionState === 'reconnecting'" class="is-loading"><Loading /></el-icon>
-            <el-icon v-else><WarningFilled /></el-icon>
-            
-            <span v-if="connectionState === 'connecting'">正在连接服务器...</span>
-            <span v-if="connectionState === 'reconnecting'">连接断开，正在尝试重连 ({{ reconnectAttempts }})...</span>
-            <span v-if="connectionState === 'disconnected'">服务器连接已断开，请检查网络或重试</span>
-            
-            <el-button 
-              v-if="connectionState === 'disconnected'" 
-              type="primary" 
-              size="small" 
-              @click="reconnect"
-            >
-              立即重试
-            </el-button>
-          </div>
-        </div>
-
         <ChatPanel
           :messages="messages"
           :current-agent="currentAgent"
           :is-agent-typing="isAgentTyping"
           :is-generating="isAgentTyping"
-          :connection-state="connectionState"
-          :should-reconnect="shouldReconnect"
           @send-message="handleSendMessage"
           @stop-generate="handleStopGenerate"
           @widget-action="handleWidgetAction"
@@ -84,8 +62,8 @@
 
 <script setup>
 import { ref, watch, onMounted, onUnmounted, computed } from 'vue'
-import { ElMessage, ElButton, ElIcon } from 'element-plus'
-import { Loading, WarningFilled, Plus } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import { Plus } from '@element-plus/icons-vue'
 import { useAuthStore } from '../stores/auth'
 import { useMultiAgent } from '../composables/useMultiAgent'
 import AppSidebar from '../components/layout/AppSidebar.vue'
@@ -357,18 +335,6 @@ watch(() => authStore.isAuthenticated, (authed) => {
   margin: auto;
   border-radius: 2px;
 }
-.connection-status-banner {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  padding: 6px 12px;
-  border-radius: 20px;
-  font-size: 12px;
-  z-index: 100;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-  backdrop-filter: blur(8px);
-  background: rgba(255, 255, 255, 0.8);
-}
 .sidebar-floating-toggle {
   position: fixed;
   left: 20px;
@@ -411,4 +377,5 @@ watch(() => authStore.isAuthenticated, (authed) => {
 :deep(.el-overlay) {
   backdrop-filter: blur(2px);
 }
+
 </style>

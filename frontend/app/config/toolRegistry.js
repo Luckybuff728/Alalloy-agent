@@ -63,14 +63,14 @@ const TOOL_REGISTRY = {
   'onnx_models_list': {
     displayName: 'ONNX 模型列表',
     category: ToolCategory.PREDICTION,
-    resultDisplay: ResultDisplay.INLINE,
-    description: '查询可用的 ONNX 预测模型列表',
+    resultDisplay: ResultDisplay.NONE,
+    description: '查询可用的 ONNX 预测模型列表（过程工具，不展示结果卡片）',
   },
   'onnx_get_model_config': {
     displayName: 'ONNX 模型配置',
     category: ToolCategory.PREDICTION,
     resultDisplay: ResultDisplay.NONE,
-    description: '获取 ONNX 模型配置信息',
+    description: '获取 ONNX 模型配置信息（过程工具，不展示结果卡片）',
   },
   'predict_ml_performance_tool': {
     displayName: 'ML 性能预测',
@@ -91,22 +91,46 @@ const TOOL_REGISTRY = {
   },
   // MCP 原生工具名称
   'calphamesh_submit_scheil_task': {
-    displayName: 'Scheil 凝固计算',
+    displayName: 'Scheil 凝固模拟',
     category: ToolCategory.THERMO,
     resultDisplay: ResultDisplay.NONE,
-    description: '提交 Scheil 凝固计算任务（MCP）',
+    description: '提交 Scheil 非平衡凝固模拟任务（MCP）',
   },
   'calphamesh_submit_point_task': {
-    displayName: '热力学点计算',
+    displayName: '单点平衡计算',
     category: ToolCategory.THERMO,
     resultDisplay: ResultDisplay.NONE,
-    description: '提交单点平衡计算任务（MCP）',
+    description: '提交单点热力学平衡计算任务（MCP）',
   },
   'calphamesh_submit_line_task': {
-    displayName: '相分数曲线计算',
+    displayName: '温度扫描计算',
     category: ToolCategory.THERMO,
     resultDisplay: ResultDisplay.NONE,
-    description: '提交线性扫描热力学任务（MCP）',
+    description: '提交定成分温度扫描热力学任务（MCP）',
+  },
+  'calphamesh_submit_binary_task': {
+    displayName: '二元平衡相图',
+    category: ToolCategory.THERMO,
+    resultDisplay: ResultDisplay.NONE,
+    description: '提交二元平衡相图计算任务（MCP）',
+  },
+  'calphamesh_submit_ternary_task': {
+    displayName: '三元等温截面',
+    category: ToolCategory.THERMO,
+    resultDisplay: ResultDisplay.NONE,
+    description: '提交三元等温截面计算任务（MCP）',
+  },
+  'calphamesh_submit_boiling_point_task': {
+    displayName: '熔点/沸点计算',
+    category: ToolCategory.THERMO,
+    resultDisplay: ResultDisplay.NONE,
+    description: '提交熔点/沸点搜索任务（MCP）',
+  },
+  'calphamesh_submit_thermodynamic_properties_task': {
+    displayName: '热力学性质扫描',
+    category: ToolCategory.THERMO,
+    resultDisplay: ResultDisplay.NONE,
+    description: '提交 GM/HM/SM/CPM 热力学性质扫描任务（MCP）',
   },
   'calphamesh_get_task_status': {
     displayName: 'Calphad 任务状态',

@@ -35,7 +35,7 @@
     <!-- 底部说明 -->
     <div class="card-footer">
       <el-icon :size="12"><InformationCircleOutline /></el-icon>
-      <span>预测基于 Al-Si-Mg 系铝合金训练数据，数值需经实验验证后方可用于工程决策。</span>
+      <span>预测基于 Al-Si-Mg 系铝合金训练数据。</span>
     </div>
   </div>
 </template>

@@ -6,7 +6,8 @@
 前端可直接渲染 Markdown 并提供浏览器打印 / 导出 PDF 功能。
 
 设计说明：
-- return_direct=True：reportWriter 调用后立即结束子图，不再继续 ReAct 循环
+- return_direct=False（默认）：reportWriter 调用后 ReAct 循环继续，
+  可接着调用 show_guidance_widget 展示引导选项
 - 工具只负责"保存 + 返回结构"，不调用 interrupt()，不阻塞图执行
 - 前端通过 tool_name="generate_report" 识别并渲染专属报告视图
 """
@@ -29,7 +30,7 @@ def _ensure_reports_dir() -> str:
     return os.path.abspath(_REPORTS_DIR)
 
 
-@tool(return_direct=True)
+@tool
 def generate_report(
     content: str,
     title: str = "铝合金设计分析报告",

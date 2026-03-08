@@ -20,4 +20,4 @@ from .report_tool import generate_report
 # 本地工具按角色分组（MCP 工具在 builder.py 中动态注入）
 DATA_EXPERT_TOOLS = [query_idme, show_guidance_widget]
 ANALYST_TOOLS = [show_guidance_widget]          # MCP 工具在运行时追加
-REPORT_WRITER_TOOLS = [generate_report]         # reportWriter 专属工具
+REPORT_WRITER_TOOLS = [generate_report, show_guidance_widget]   # reportWriter 工具

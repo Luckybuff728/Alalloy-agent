@@ -36,6 +36,8 @@
 | `deep_thermodynamic_analysis` | `analysisExpert` | 执行扩展四项（thermo_properties/binary/ternary/boiling_point 各自独立，部分未做即未做） |
 | `retry` | 上一个专家是谁就路由回谁 | |
 | `generate_report` | `reportWriter` | |
+| `refine_composition` | `dataExpert` | 调整成分约束重新查询，清除上一轮分析结果 |
+| `new_task` | `dataExpert` | 全新设计任务，视为全新对话起点 |
 | "继续查询 / 扩大范围 / 调整条件" | `dataExpert` | |
 | "取消 / 跳过" | `__end__` | |
 
@@ -49,12 +51,12 @@
 1. 无候选成分 → `dataExpert`
 2. 有候选成分但无计算结果 → `analysisExpert`
 3. 有计算结果但无报告 → `reportWriter`
-4. `generate_report` 工具已成功调用 → `__end__`
+4. `generate_report` 已成功调用 → `__end__`（reportWriter 内部负责后续摘要和挂件）
 
 ### 规则 5：反循环保护
 
 上一个专家无工具调用结果且**用户未发新消息（挂件选择视为新消息）** → 禁止再次路由到同一专家。  
-⛔ `generate_report` 成功后**严禁**再次路由到 `reportWriter`，直接 `__end__`。
+⛔ `generate_report` 工具在对话历史中**已成功调用**，**且** Rule 1 / Rule 2 均未命中（即用户未明确要求重新生成报告）时，禁止再次路由到 `reportWriter`，直接 `__end__`（`reportWriter` 内部会处理后续摘要和挂件，thinker 不再重入）。
 
 ---
 

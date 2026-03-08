@@ -67,3 +67,6 @@ upload_pubkey.ps1
 *.docx
 *.xlsx
 *.pptx
+
+frontend_static.tar.gz
+scripts/*.tar.gz
